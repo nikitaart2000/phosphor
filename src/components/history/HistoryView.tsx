@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
+import { getHistory } from '../../lib/api';
+import type { CloneRecord } from '../../machines/types';
 
 interface HistoryRecord {
   id: number;
@@ -8,14 +11,6 @@ interface HistoryRecord {
   date: string;
   status: 'ok' | 'fail';
 }
-
-const DEMO_HISTORY: HistoryRecord[] = [
-  { id: 1, source: 'EM4100', target: 'T5577', uid: '1A2B3C4D5E', date: '2026-02-10 14:23', status: 'ok' },
-  { id: 2, source: 'HID ProxII', target: 'T5577', uid: '00A1B2C3', date: '2026-02-10 14:18', status: 'ok' },
-  { id: 3, source: 'Indala', target: 'T5577', uid: 'F0E1D2C3B4', date: '2026-02-10 13:55', status: 'fail' },
-  { id: 4, source: 'EM4100', target: 'T5577', uid: '5A5B5C5D5E', date: '2026-02-09 17:42', status: 'ok' },
-  { id: 5, source: 'AWID', target: 'T5577', uid: '0012345678', date: '2026-02-09 16:30', status: 'ok' },
-];
 
 // Box-drawing table
 const H = '\u2500'; // horizontal
@@ -75,8 +70,74 @@ function buildTable(records: HistoryRecord[]): string[] {
   return lines;
 }
 
+/** Map backend CloneRecord to display HistoryRecord */
+function toHistoryRecord(r: CloneRecord, index: number): HistoryRecord {
+  return {
+    id: index + 1,
+    source: r.source_type,
+    target: r.blank_type,
+    uid: r.source_uid || '---',
+    date: r.timestamp,
+    status: r.success ? 'ok' as const : 'fail' as const,
+  };
+}
+
 export function HistoryView() {
-  const tableLines = buildTable(DEMO_HISTORY);
+  const [records, setRecords] = useState<HistoryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getHistory()
+      .then((data: CloneRecord[]) => {
+        if (!cancelled) {
+          setRecords(data.map(toHistoryRecord));
+        }
+      })
+      .catch(() => {
+        // API unavailable — show empty state
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Loading state
+  if (loading) {
+    return (
+      <TerminalPanel title="CLONE HISTORY">
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          color: 'var(--green-dim)',
+          padding: '12px 0',
+        }}>
+          [..] Loading history...
+        </div>
+      </TerminalPanel>
+    );
+  }
+
+  // Empty state
+  if (records.length === 0) {
+    return (
+      <TerminalPanel title="CLONE HISTORY">
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          color: 'var(--green-dim)',
+          padding: '12px 0',
+        }}>
+          No clone history yet.
+        </div>
+      </TerminalPanel>
+    );
+  }
+
+  const tableLines = buildTable(records);
+  const successCount = records.filter(r => r.status === 'ok').length;
 
   return (
     <TerminalPanel title="CLONE HISTORY">
@@ -96,7 +157,7 @@ export function HistoryView() {
         ))}
       </div>
       <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--green-dim)' }}>
-        {DEMO_HISTORY.length} records | {DEMO_HISTORY.filter(r => r.status === 'ok').length} successful
+        {records.length} records | {successCount} successful
       </div>
     </TerminalPanel>
   );
