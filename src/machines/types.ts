@@ -65,14 +65,14 @@ export interface CardSummary {
 }
 
 export interface CloneRecord {
-  id: number;
-  timestamp: string;
+  id: number | null;
   source_type: string;
-  source_uid: string | null;
-  source_data: string | null;
-  blank_type: string;
+  source_uid: string;
+  target_type: string;
+  target_uid: string;
+  port: string;
   success: boolean;
-  verify_ok: boolean | null;
+  timestamp: string;
   notes: string | null;
 }
 

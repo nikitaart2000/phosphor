@@ -12,6 +12,17 @@ import type {
 } from './types';
 import * as api from '../lib/api';
 
+// Helper: safely extract a string message from an unknown error value.
+// Prevents `[object Object]` from structured error payloads.
+function extractErrorMessage(e: unknown): string {
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object') {
+    if ('message' in e) return String((e as { message: unknown }).message);
+    return JSON.stringify(e);
+  }
+  return String(e);
+}
+
 // -- Machine context --
 
 export interface WizardContext {
@@ -129,9 +140,6 @@ export const wizardMachine = setup({
         input.blankType ?? undefined,
       );
     }),
-    resetBackend: fromPromise<WizardState>(async () => {
-      return api.resetWizard();
-    }),
   },
 }).createMachine({
   id: 'wizard',
@@ -148,30 +156,39 @@ export const wizardMachine = setup({
     detectingDevice: {
       invoke: {
         src: 'detectDevice',
-        onDone: {
-          target: 'deviceConnected',
-          actions: assign({
-            port: ({ event }) => {
-              const ws = event.output;
-              if (ws.step === 'DeviceConnected') return ws.data.port;
-              return null;
-            },
-            model: ({ event }) => {
-              const ws = event.output;
-              if (ws.step === 'DeviceConnected') return ws.data.model;
-              return null;
-            },
-            firmware: ({ event }) => {
-              const ws = event.output;
-              if (ws.step === 'DeviceConnected') return ws.data.firmware;
-              return null;
-            },
-          }),
-        },
+        onDone: [
+          {
+            guard: ({ event }) => event.output.step === 'DeviceConnected',
+            target: 'deviceConnected',
+            actions: assign({
+              port: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.port : null,
+              model: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.model : null,
+              firmware: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.firmware : null,
+            }),
+          },
+          {
+            target: 'error',
+            actions: assign({
+              errorMessage: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'Error') return ws.data.message;
+                return 'Device detection returned unexpected state';
+              },
+              errorUserMessage: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'Error') return ws.data.user_message;
+                return 'No Proxmark3 device found. Check USB connection and try again.';
+              },
+              errorRecoverable: () => true,
+              errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
+              errorSource: () => 'detect' as const,
+            }),
+          },
+        ],
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => String(event.error),
+            errorMessage: ({ event }) => extractErrorMessage(event.error),
             errorUserMessage: () => 'Could not detect a Proxmark3 device. Check the USB connection and try again.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
@@ -239,8 +256,16 @@ export const wizardMachine = setup({
                 if (ws.step === 'Error') return ws.data.user_message;
                 return 'No card detected. Place a card on the reader and try again.';
               },
-              errorRecoverable: () => true,
-              errorRecoveryAction: () => 'Retry' as RecoveryAction,
+              errorRecoverable: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'Error') return ws.data.recoverable;
+                return true;
+              },
+              errorRecoveryAction: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'Error' && ws.data.recovery_action) return ws.data.recovery_action;
+                return 'Retry' as RecoveryAction;
+              },
               errorSource: () => 'scan' as const,
             }),
           },
@@ -248,7 +273,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => String(event.error),
+            errorMessage: ({ event }) => extractErrorMessage(event.error),
             errorUserMessage: () => 'Card scan failed. Check device connection.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -305,7 +330,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => String(event.error),
+            errorMessage: ({ event }) => extractErrorMessage(event.error),
             errorUserMessage: () => 'Failed to detect blank card.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -336,7 +361,7 @@ export const wizardMachine = setup({
           {
             guard: ({ event }) => {
               const ws = event.output;
-              return ws.step === 'Verifying' || ws.step === 'VerificationComplete' || ws.step === 'Complete';
+              return ws.step === 'Verifying' || ws.step === 'VerificationComplete';
             },
             target: 'verifying',
           },
@@ -370,7 +395,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => String(event.error),
+            errorMessage: ({ event }) => extractErrorMessage(event.error),
             errorUserMessage: () => 'Write operation failed. Do not remove the card.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -381,11 +406,12 @@ export const wizardMachine = setup({
       on: {
         WRITE_PROGRESS: {
           actions: assign({
-            writeProgress: ({ event }) => event.progress,
+            writeProgress: ({ event }) => event.progress * 100,
             currentBlock: ({ event }) => event.currentBlock,
             totalBlocks: ({ event }) => event.totalBlocks,
           }),
         },
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },
 
@@ -424,7 +450,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => String(event.error),
+            errorMessage: ({ event }) => extractErrorMessage(event.error),
             errorUserMessage: () => 'Verification failed.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -432,14 +458,28 @@ export const wizardMachine = setup({
           }),
         },
       },
+      on: {
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
     },
 
     verificationComplete: {
       on: {
         FINISH: {
+          guard: ({ context }) => context.verifySuccess === true,
           target: 'complete',
           actions: assign({
             completionTimestamp: () => new Date().toISOString(),
+          }),
+        },
+        WRITE: {
+          target: 'waitingForBlank',
+          actions: assign({
+            writeProgress: () => 0,
+            currentBlock: () => null,
+            totalBlocks: () => null,
+            verifySuccess: () => null,
+            mismatchedBlocks: () => [] as number[],
           }),
         },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
@@ -455,23 +495,6 @@ export const wizardMachine = setup({
     error: {
       on: {
         RESET: { target: 'idle', actions: assign(() => initialContext) },
-        DETECT: {
-          guard: ({ context }) => context.errorRecoveryAction === 'Reconnect',
-          target: 'detectingDevice',
-        },
-        WRITE: {
-          guard: ({ context }) =>
-            context.errorRecoveryAction === 'Retry' &&
-            (context.errorSource === 'write' || context.errorSource === 'blank'),
-          target: 'waitingForBlank',
-        },
-        SCAN: {
-          guard: ({ context }) =>
-            context.errorRecoveryAction === 'Retry' &&
-            context.errorSource !== 'write' &&
-            context.errorSource !== 'blank',
-          target: 'scanningCard',
-        },
       },
     },
   },

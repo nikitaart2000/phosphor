@@ -81,7 +81,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     const unlisten = listen<WriteProgressPayload>('write-progress', (event) => {
       send({
         type: 'WRITE_PROGRESS',
-        progress: event.payload.progress,
+        progress: event.payload.progress * 100,
         currentBlock: event.payload.current_block,
         totalBlocks: event.payload.total_blocks,
       });
@@ -116,7 +116,26 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     [send],
   );
   const write = useCallback(() => send({ type: 'WRITE' }), [send]);
-  const finish = useCallback(() => send({ type: 'FINISH' }), [send]);
+  const finish = useCallback(async () => {
+    send({ type: 'FINISH' });
+    // Save clone record to history after successful verification
+    const ctx = state.context;
+    if (ctx.verifySuccess && ctx.cardType && ctx.cardData && ctx.port) {
+      try {
+        await api.saveCloneRecord({
+          id: null,
+          source_type: ctx.cardType,
+          source_uid: ctx.cardData.uid,
+          target_type: ctx.blankType ?? 'T5577',
+          target_uid: ctx.cardData.uid,
+          port: ctx.port,
+          success: true,
+          timestamp: new Date().toISOString(),
+          notes: null,
+        });
+      } catch { /* best-effort history save */ }
+    }
+  }, [send, state.context]);
   const reset = useCallback(async () => {
     try { await api.resetWizard(); } catch { /* best-effort backend reset */ }
     send({ type: 'RESET' });
