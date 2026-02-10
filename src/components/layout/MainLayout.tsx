@@ -5,11 +5,33 @@ import { StatusBar, type SystemStatus } from './StatusBar';
 import { WizardContainer } from '../wizard/WizardContainer';
 import { HistoryView } from '../history/HistoryView';
 import { useMusic } from '../../hooks/useMusic';
+import { useWizard } from '../../hooks/useWizard';
 
 export function MainLayout() {
   const [activeTab, setActiveTab] = useState<TabId>('scan');
-  const [status] = useState<SystemStatus>('ready');
   const { enabled: musicEnabled, toggle: toggleMusic } = useMusic();
+  const wizard = useWizard();
+
+  // B1: Derive PM3 connection status from wizard step
+  const connected = wizard.currentStep !== 'Idle' && wizard.currentStep !== 'DetectingDevice';
+
+  // B8: Derive system status from wizard state
+  const status: SystemStatus = wizard.isLoading ? 'busy'
+    : wizard.currentStep === 'Error' ? 'error'
+    : 'ready';
+
+  const statusMessage = (() => {
+    switch (wizard.currentStep) {
+      case 'DetectingDevice': return 'Detecting PM3...';
+      case 'ScanningCard': return 'Scanning card...';
+      case 'WaitingForBlank': return 'Waiting for blank...';
+      case 'Writing': return 'Writing clone...';
+      case 'Verifying': return 'Verifying...';
+      case 'Error': return wizard.context.errorUserMessage || 'ERROR';
+      case 'Complete': return 'Clone complete!';
+      default: return undefined;
+    }
+  })();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -51,16 +73,17 @@ export function MainLayout() {
     >
       {/* TopBar spans full width */}
       <div style={{ gridColumn: '1 / -1' }}>
-        <TopBar connected={false} />
+        <TopBar connected={connected} />
       </div>
 
       {/* Sidebar */}
+      {/* B2: Pull device info from wizard context */}
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        deviceName="Proxmark3 Easy"
-        devicePort="---"
-        firmware="---"
+        deviceName={wizard.context.model || '---'}
+        devicePort={wizard.context.port || '---'}
+        firmware={wizard.context.firmware || '---'}
       />
 
       {/* Main content area */}
@@ -75,7 +98,7 @@ export function MainLayout() {
 
       {/* StatusBar spans full width */}
       <div style={{ gridColumn: '1 / -1' }}>
-        <StatusBar status={status} musicEnabled={musicEnabled} onMusicToggle={toggleMusic} />
+        <StatusBar status={status} message={statusMessage} musicEnabled={musicEnabled} onMusicToggle={toggleMusic} />
       </div>
 
     </div>

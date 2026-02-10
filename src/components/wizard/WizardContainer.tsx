@@ -53,6 +53,7 @@ export function WizardContainer() {
             frequency={wizard.context.frequency}
             cloneable={wizard.context.cloneable}
             onScanned={() => wizard.skipToBlank(wizard.context.recommendedBlank!)}
+            onReset={wizard.reset}
             isLoading={false}
           />
         );
@@ -122,6 +123,17 @@ export function WizardContainer() {
             }}
             onReset={wizard.reset}
           />
+        );
+      default:
+        return (
+          <div style={{
+            color: 'var(--red-bright)',
+            fontSize: '13px',
+            padding: '24px',
+            fontFamily: 'var(--font-mono)',
+          }}>
+            [!!] Unknown state: {wizard.currentStep}
+          </div>
         );
     }
   };

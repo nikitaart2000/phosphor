@@ -6,6 +6,7 @@ import type { CardData, CardType, Frequency } from '../../machines/types';
 interface ScanStepProps {
   device: { model: string; port: string; firmware: string };
   onScanned: () => void;
+  onReset?: () => void;
   isLoading?: boolean;
   cardData?: CardData | null;
   cardType?: CardType | null;
@@ -18,6 +19,7 @@ const SPINNER_FRAMES = ['|', '/', '-', '\\'];
 export function ScanStep({
   device,
   onScanned,
+  onReset,
   isLoading,
   cardData,
   cardType,
@@ -74,9 +76,37 @@ export function ScanStep({
           ))}
 
           {cloneable === false && (
-            <div style={{ color: 'var(--amber)', marginTop: '12px', fontWeight: 600 }}>
-              [!!] This card type cannot be cloned
-            </div>
+            <>
+              <div style={{ color: 'var(--amber)', marginTop: '12px', fontWeight: 600 }}>
+                [!!] This card type cannot be cloned
+              </div>
+              {onReset && (
+                <div style={{ marginTop: '16px' }}>
+                  <button
+                    onClick={() => { sfx.action(); onReset(); }}
+                    style={{
+                      background: 'var(--bg-void)',
+                      color: 'var(--amber)',
+                      border: '2px solid var(--amber)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      padding: '6px 20px',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      sfx.hover();
+                      e.currentTarget.style.background = 'var(--green-ghost)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-void)';
+                    }}
+                  >
+                    {'<--'} SCAN AGAIN
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           {cloneable !== false && (
