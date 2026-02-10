@@ -1,10 +1,12 @@
 import { TerminalPanel } from '../shared/TerminalPanel';
+import { useSfx } from '../../hooks/useSfx';
 
 interface CompleteStepProps {
   onReset: () => void;
 }
 
 export function CompleteStep({ onReset }: CompleteStepProps) {
+  const sfx = useSfx();
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   return (
@@ -29,7 +31,7 @@ export function CompleteStep({ onReset }: CompleteStepProps) {
 
         <div style={{ marginTop: '20px' }}>
           <button
-            onClick={onReset}
+            onClick={() => { sfx.action(); onReset(); }}
             style={{
               background: 'var(--bg-void)',
               color: 'var(--green-bright)',
@@ -41,6 +43,7 @@ export function CompleteStep({ onReset }: CompleteStepProps) {
               cursor: 'pointer',
             }}
             onMouseEnter={(e) => {
+              sfx.hover();
               e.currentTarget.style.background = 'var(--green-ghost)';
             }}
             onMouseLeave={(e) => {

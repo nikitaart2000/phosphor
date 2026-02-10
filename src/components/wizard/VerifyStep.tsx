@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
 import { OperationLog, type LogEntry } from '../shared/OperationLog';
+import { useSfx } from '../../hooks/useSfx';
 
 interface VerifyStepProps {
   onContinue: () => void;
 }
 
 export function VerifyStep({ onContinue }: VerifyStepProps) {
+  const sfx = useSfx();
   const [verifying, setVerifying] = useState(true);
   const [success, setSuccess] = useState(false);
   const [logLines, setLogLines] = useState<LogEntry[]>([]);
@@ -59,7 +61,7 @@ export function VerifyStep({ onContinue }: VerifyStepProps) {
           )}
 
           <button
-            onClick={onContinue}
+            onClick={() => { sfx.action(); onContinue(); }}
             style={{
               marginTop: '16px',
               background: 'var(--bg-void)',
@@ -72,6 +74,7 @@ export function VerifyStep({ onContinue }: VerifyStepProps) {
               cursor: 'pointer',
             }}
             onMouseEnter={(e) => {
+              sfx.hover();
               e.currentTarget.style.background = 'var(--green-ghost)';
             }}
             onMouseLeave={(e) => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
+import { useSfx } from '../../hooks/useSfx';
 
 interface ScanStepProps {
   onScanned: () => void;
@@ -8,6 +9,7 @@ interface ScanStepProps {
 const SPINNER_FRAMES = ['|', '/', '-', '\\'];
 
 export function ScanStep({ onScanned }: ScanStepProps) {
+  const sfx = useSfx();
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
@@ -62,7 +64,7 @@ export function ScanStep({ onScanned }: ScanStepProps) {
           </div>
           <div style={{ marginTop: '16px' }}>
             <button
-              onClick={onScanned}
+              onClick={() => { sfx.action(); onScanned(); }}
               style={{
                 background: 'var(--bg-void)',
                 color: 'var(--green-bright)',
@@ -74,6 +76,7 @@ export function ScanStep({ onScanned }: ScanStepProps) {
                 cursor: 'pointer',
               }}
               onMouseEnter={(e) => {
+                sfx.hover();
                 e.currentTarget.style.background = 'var(--green-ghost)';
               }}
               onMouseLeave={(e) => {
@@ -91,7 +94,7 @@ export function ScanStep({ onScanned }: ScanStepProps) {
   return (
     <div style={{ textAlign: 'center' }}>
       <button
-        onClick={handleScan}
+        onClick={() => { if (!scanning) sfx.action(); handleScan(); }}
         disabled={scanning}
         style={{
           background: scanning ? 'var(--bg-surface)' : 'var(--bg-void)',
@@ -105,7 +108,7 @@ export function ScanStep({ onScanned }: ScanStepProps) {
           transition: 'border-color 0.3s, background 0.2s',
         }}
         onMouseEnter={(e) => {
-          if (!scanning) e.currentTarget.style.background = 'var(--green-ghost)';
+          if (!scanning) { sfx.hover(); e.currentTarget.style.background = 'var(--green-ghost)'; }
         }}
         onMouseLeave={(e) => {
           if (!scanning) e.currentTarget.style.background = 'var(--bg-void)';

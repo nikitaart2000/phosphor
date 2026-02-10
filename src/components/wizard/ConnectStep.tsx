@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
+import { useSfx } from '../../hooks/useSfx';
 
 interface ConnectStepProps {
   onConnected: () => void;
 }
 
 export function ConnectStep({ onConnected }: ConnectStepProps) {
+  const sfx = useSfx();
   const [detecting, setDetecting] = useState(true);
   const [dots, setDots] = useState('');
   const [deviceInfo, setDeviceInfo] = useState<{
@@ -58,7 +60,7 @@ export function ConnectStep({ onConnected }: ConnectStepProps) {
           </div>
           <div style={{ marginTop: '16px' }}>
             <button
-              onClick={onConnected}
+              onClick={() => { sfx.action(); onConnected(); }}
               style={{
                 background: 'var(--bg-void)',
                 color: 'var(--green-bright)',
@@ -71,6 +73,7 @@ export function ConnectStep({ onConnected }: ConnectStepProps) {
                 textTransform: 'uppercase',
               }}
               onMouseEnter={(e) => {
+                sfx.hover();
                 e.currentTarget.style.background = 'var(--green-ghost)';
               }}
               onMouseLeave={(e) => {

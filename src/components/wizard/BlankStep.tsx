@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
+import { useSfx } from '../../hooks/useSfx';
 
 interface BlankStepProps {
   onReady: () => void;
@@ -8,6 +9,7 @@ interface BlankStepProps {
 const DETECT_FRAMES = ['.  ', '.. ', '...', ' ..', '  .', '   '];
 
 export function BlankStep({ onReady }: BlankStepProps) {
+  const sfx = useSfx();
   const [detecting, setDetecting] = useState(true);
   const [frameIdx, setFrameIdx] = useState(0);
 
@@ -52,7 +54,7 @@ export function BlankStep({ onReady }: BlankStepProps) {
             </div>
             <div style={{ marginTop: '16px' }}>
               <button
-                onClick={onReady}
+                onClick={() => { sfx.action(); onReady(); }}
                 style={{
                   background: 'var(--bg-void)',
                   color: 'var(--green-bright)',
@@ -64,6 +66,7 @@ export function BlankStep({ onReady }: BlankStepProps) {
                   cursor: 'pointer',
                 }}
                 onMouseEnter={(e) => {
+                  sfx.hover();
                   e.currentTarget.style.background = 'var(--green-ghost)';
                 }}
                 onMouseLeave={(e) => {
