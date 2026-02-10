@@ -32,6 +32,7 @@ pub fn run() {
             commands::wizard::get_wizard_state,
             commands::wizard::wizard_action,
             commands::device::detect_device,
+            commands::blank::detect_blank,
             commands::scan::scan_card,
             commands::write::write_clone,
             commands::write::write_clone_with_data,

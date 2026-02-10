@@ -1,3 +1,4 @@
+pub mod blank;
 pub mod device;
 pub mod history;
 pub mod scan;

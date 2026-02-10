@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::cards::types::{BlankType, CardSummary, CardType, RecoveryAction};
 use crate::error::AppError;
@@ -86,7 +86,7 @@ async fn write_t5577_flow(
     machine: &State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Step 1: Detect T5577
-    update_progress(machine, 0.1, Some(0), Some(5))?;
+    update_progress(app, machine, 0.1, Some(0), Some(5))?;
 
     let detect_out =
         connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
@@ -103,7 +103,7 @@ async fn write_t5577_flow(
     }
 
     // Step 2: Check for password protection
-    update_progress(machine, 0.2, Some(1), Some(5))?;
+    update_progress(app, machine, 0.2, Some(1), Some(5))?;
 
     let password: Option<String> = if t5577_status.password_set {
         // Password detected -- run chk to find it
@@ -139,13 +139,13 @@ async fn write_t5577_flow(
     };
 
     // Step 3: Wipe (with password if needed)
-    update_progress(machine, 0.4, Some(2), Some(5))?;
+    update_progress(app, machine, 0.4, Some(2), Some(5))?;
 
     let wipe_cmd = command_builder::build_wipe_command(&BlankType::T5577, password.as_deref());
     connection::run_command(app, port, &wipe_cmd).await?;
 
     // Step 4: Clone (with password if needed)
-    update_progress(machine, 0.6, Some(3), Some(5))?;
+    update_progress(app, machine, 0.6, Some(3), Some(5))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
@@ -168,7 +168,7 @@ async fn write_t5577_flow(
     }
 
     // Step 5: Done writing -> Verifying transition
-    update_progress(machine, 1.0, Some(4), Some(5))?;
+    update_progress(app, machine, 1.0, Some(4), Some(5))?;
     {
         let mut m = machine.lock().map_err(|e| {
             AppError::CommandFailed(format!("State lock poisoned: {}", e))
@@ -195,12 +195,12 @@ async fn write_em4305_flow(
     machine: &State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Step 1: Wipe EM4305
-    update_progress(machine, 0.2, Some(0), Some(3))?;
+    update_progress(app, machine, 0.2, Some(0), Some(3))?;
 
     connection::run_command(app, port, command_builder::build_em4305_wipe()).await?;
 
     // Step 2: Clone with --em flag
-    update_progress(machine, 0.5, Some(1), Some(3))?;
+    update_progress(app, machine, 0.5, Some(1), Some(3))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
@@ -220,7 +220,7 @@ async fn write_em4305_flow(
     }
 
     // Step 3: Done -> Verifying
-    update_progress(machine, 1.0, Some(2), Some(3))?;
+    update_progress(app, machine, 1.0, Some(2), Some(3))?;
     {
         let mut m = machine.lock().map_err(|e| {
             AppError::CommandFailed(format!("State lock poisoned: {}", e))
@@ -296,6 +296,7 @@ pub async fn verify_clone(
 // ---------------------------------------------------------------------------
 
 fn update_progress(
+    app: &AppHandle,
     machine: &State<'_, Mutex<WizardMachine>>,
     progress: f32,
     current_block: Option<u16>,
@@ -309,6 +310,15 @@ fn update_progress(
         current_block,
         total_blocks,
     })?;
+    // Emit event to frontend for real-time progress updates
+    let _ = app.emit(
+        "write-progress",
+        serde_json::json!({
+            "progress": progress,
+            "current_block": current_block,
+            "total_blocks": total_blocks,
+        }),
+    );
     Ok(())
 }
 
