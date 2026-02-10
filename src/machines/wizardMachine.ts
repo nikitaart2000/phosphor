@@ -49,6 +49,7 @@ export interface WizardContext {
   errorUserMessage: string | null;
   errorRecoverable: boolean;
   errorRecoveryAction: RecoveryAction | null;
+  errorSource: 'scan' | 'write' | 'detect' | 'verify' | 'blank' | null;
 }
 
 const initialContext: WizardContext = {
@@ -73,6 +74,7 @@ const initialContext: WizardContext = {
   errorUserMessage: null,
   errorRecoverable: false,
   errorRecoveryAction: null,
+  errorSource: null,
 };
 
 // -- Events --
@@ -91,60 +93,6 @@ export type WizardEvent =
   | { type: 'FINISH' }
   | { type: 'ERROR'; message: string; userMessage: string; recoverable: boolean; recoveryAction: RecoveryAction | null }
   | { type: 'RESET' };
-
-// -- Helper: parse backend WizardState into events --
-
-function wizardStateToEvent(ws: WizardState): WizardEvent {
-  switch (ws.step) {
-    case 'DeviceConnected':
-      return {
-        type: 'DEVICE_FOUND',
-        port: ws.data.port,
-        model: ws.data.model,
-        firmware: ws.data.firmware,
-      };
-    case 'CardIdentified':
-      return {
-        type: 'CARD_FOUND',
-        frequency: ws.data.frequency,
-        cardType: ws.data.card_type,
-        cardData: ws.data.card_data,
-        cloneable: ws.data.cloneable,
-        recommendedBlank: ws.data.recommended_blank,
-      };
-    case 'BlankDetected':
-      return {
-        type: 'BLANK_READY',
-        blankType: ws.data.blank_type,
-        readyToWrite: ws.data.ready_to_write,
-      };
-    case 'Writing':
-      return {
-        type: 'WRITE_PROGRESS',
-        progress: ws.data.progress,
-        currentBlock: ws.data.current_block,
-        totalBlocks: ws.data.total_blocks,
-      };
-    case 'VerificationComplete':
-      return {
-        type: 'VERIFY_RESULT',
-        success: ws.data.success,
-        mismatchedBlocks: ws.data.mismatched_blocks,
-      };
-    case 'Complete':
-      return { type: 'FINISH' };
-    case 'Error':
-      return {
-        type: 'ERROR',
-        message: ws.data.message,
-        userMessage: ws.data.user_message,
-        recoverable: ws.data.recoverable,
-        recoveryAction: ws.data.recovery_action,
-      };
-    default:
-      return { type: 'RESET' };
-  }
-}
 
 // -- Machine definition --
 
@@ -227,6 +175,7 @@ export const wizardMachine = setup({
             errorUserMessage: () => 'Could not detect a Proxmark3 device. Check the USB connection and try again.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
+            errorSource: () => 'detect' as const,
           }),
         },
       },
@@ -292,6 +241,7 @@ export const wizardMachine = setup({
               },
               errorRecoverable: () => true,
               errorRecoveryAction: () => 'Retry' as RecoveryAction,
+              errorSource: () => 'scan' as const,
             }),
           },
         ],
@@ -302,6 +252,7 @@ export const wizardMachine = setup({
             errorUserMessage: () => 'Card scan failed. Check device connection.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
+            errorSource: () => 'scan' as const,
           }),
         },
       },
@@ -316,14 +267,6 @@ export const wizardMachine = setup({
           }),
         },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
-      },
-      // Auto-proceed if cloneable: set expectedBlank to recommended
-      always: {
-        guard: ({ context }) => context.cloneable && context.recommendedBlank !== null,
-        target: 'waitingForBlank',
-        actions: assign({
-          expectedBlank: ({ context }) => context.recommendedBlank,
-        }),
       },
     },
 
@@ -355,6 +298,7 @@ export const wizardMachine = setup({
               errorUserMessage: () => 'Place the correct blank card on the reader.',
               errorRecoverable: () => true,
               errorRecoveryAction: () => 'Retry' as RecoveryAction,
+              errorSource: () => 'blank' as const,
             }),
           },
         ],
@@ -365,6 +309,7 @@ export const wizardMachine = setup({
             errorUserMessage: () => 'Failed to detect blank card.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
+            errorSource: () => 'blank' as const,
           }),
         },
       },
@@ -391,7 +336,7 @@ export const wizardMachine = setup({
           {
             guard: ({ event }) => {
               const ws = event.output;
-              return ws.step === 'VerificationComplete' || ws.step === 'Complete';
+              return ws.step === 'Verifying' || ws.step === 'VerificationComplete' || ws.step === 'Complete';
             },
             target: 'verifying',
           },
@@ -418,6 +363,7 @@ export const wizardMachine = setup({
                 if (ws.step === 'Error') return ws.data.recovery_action;
                 return null;
               },
+              errorSource: () => 'write' as const,
             }),
           },
         ],
@@ -428,6 +374,7 @@ export const wizardMachine = setup({
             errorUserMessage: () => 'Write operation failed. Do not remove the card.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
+            errorSource: () => 'write' as const,
           }),
         },
       },
@@ -470,6 +417,7 @@ export const wizardMachine = setup({
               errorUserMessage: () => 'Verification could not complete.',
               errorRecoverable: () => true,
               errorRecoveryAction: () => 'Retry' as RecoveryAction,
+              errorSource: () => 'verify' as const,
             }),
           },
         ],
@@ -480,6 +428,7 @@ export const wizardMachine = setup({
             errorUserMessage: () => 'Verification failed.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
+            errorSource: () => 'verify' as const,
           }),
         },
       },
@@ -510,8 +459,17 @@ export const wizardMachine = setup({
           guard: ({ context }) => context.errorRecoveryAction === 'Reconnect',
           target: 'detectingDevice',
         },
+        WRITE: {
+          guard: ({ context }) =>
+            context.errorRecoveryAction === 'Retry' &&
+            (context.errorSource === 'write' || context.errorSource === 'blank'),
+          target: 'waitingForBlank',
+        },
         SCAN: {
-          guard: ({ context }) => context.errorRecoveryAction === 'Retry',
+          guard: ({ context }) =>
+            context.errorRecoveryAction === 'Retry' &&
+            context.errorSource !== 'write' &&
+            context.errorSource !== 'blank',
           target: 'scanningCard',
         },
       },
@@ -519,4 +477,3 @@ export const wizardMachine = setup({
   },
 });
 
-export { wizardStateToEvent };

@@ -8,6 +8,7 @@ import { listen } from '@tauri-apps/api/event';
 import { wizardMachine } from '../machines/wizardMachine';
 import type { WizardContext as WizCtx, WizardEvent } from '../machines/wizardMachine';
 import type { WizardStepName, BlankType } from '../machines/types';
+import * as api from '../lib/api';
 
 type StepName =
   | 'idle'
@@ -116,7 +117,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   );
   const write = useCallback(() => send({ type: 'WRITE' }), [send]);
   const finish = useCallback(() => send({ type: 'FINISH' }), [send]);
-  const reset = useCallback(() => send({ type: 'RESET' }), [send]);
+  const reset = useCallback(async () => {
+    try { await api.resetWizard(); } catch { /* best-effort backend reset */ }
+    send({ type: 'RESET' });
+  }, [send]);
 
   const wizardReturn = useMemo<UseWizardReturn>(
     () => ({

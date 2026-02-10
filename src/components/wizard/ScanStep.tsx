@@ -96,7 +96,7 @@ export function ScanStep({
                     }}
                     onMouseEnter={(e) => {
                       sfx.hover();
-                      e.currentTarget.style.background = 'var(--green-ghost)';
+                      e.currentTarget.style.background = 'rgba(255, 184, 0, 0.08)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'var(--bg-void)';
