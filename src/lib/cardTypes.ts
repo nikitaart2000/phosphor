@@ -194,7 +194,7 @@ export const CARD_DISPLAY: Record<CardType, CardDisplayInfo> = {
   DESFire: {
     displayName: 'MIFARE DESFire',
     frequency: 'HF',
-    blankType: 'MagicMifareGen4GDM',
+    blankType: 'MagicMifareGen4GTU',
     description: '13.56 MHz MIFARE DESFire, AES/3DES encrypted, high-security applications',
   },
   IClass: {

@@ -75,7 +75,7 @@ function toHistoryRecord(r: CloneRecord, index: number): HistoryRecord {
   return {
     id: index + 1,
     source: r.source_type,
-    target: r.blank_type,
+    target: r.target_type,
     uid: r.source_uid || '---',
     date: r.timestamp,
     status: r.success ? 'ok' as const : 'fail' as const,

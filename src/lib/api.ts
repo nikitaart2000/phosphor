@@ -12,14 +12,6 @@ export async function detectDevice(): Promise<WizardState> {
 }
 
 /**
- * Get the current wizard state from the backend.
- * Used for polling and state synchronization.
- */
-export async function getWizardState(): Promise<WizardState> {
-  return invoke<WizardState>('get_wizard_state');
-}
-
-/**
  * Scan a card on the connected device.
  * Identifies card type, frequency, and reads data.
  */
@@ -82,6 +74,14 @@ export async function verifyCloneWithData(
  */
 export async function getHistory(): Promise<CloneRecord[]> {
   return invoke<CloneRecord[]>('get_history');
+}
+
+/**
+ * Save a clone operation record to the local database.
+ * Returns the new record's ID.
+ */
+export async function saveCloneRecord(record: CloneRecord): Promise<number> {
+  return invoke<number>('save_clone_record', { record });
 }
 
 /**

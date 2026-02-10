@@ -99,6 +99,8 @@ export function WizardContainer() {
             mismatchedBlocks={wizard.context.mismatchedBlocks}
             isLoading={false}
             onContinue={wizard.finish}
+            onRetryWrite={() => wizard.send({ type: 'WRITE' })}
+            onReset={wizard.reset}
           />
         );
       case 'Complete':
@@ -117,13 +119,7 @@ export function WizardContainer() {
             recoverable={wizard.context.errorRecoverable}
             recoveryAction={wizard.context.errorRecoveryAction}
             errorSource={wizard.context.errorSource}
-            onRetry={() => {
-              if (wizard.context.errorRecoveryAction === 'Reconnect') wizard.detect();
-              else if (wizard.context.errorRecoveryAction === 'Retry' &&
-                       (wizard.context.errorSource === 'write' || wizard.context.errorSource === 'blank')) wizard.write();
-              else if (wizard.context.errorRecoveryAction === 'Retry') wizard.scan();
-              else wizard.reset();
-            }}
+            onRetry={wizard.reset}
             onReset={wizard.reset}
           />
         );

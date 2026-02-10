@@ -4,6 +4,8 @@ import { useSfx } from '../../hooks/useSfx';
 
 interface VerifyStepProps {
   onContinue: () => void;
+  onRetryWrite?: () => void;
+  onReset?: () => void;
   isLoading?: boolean;
   success?: boolean | null;
   mismatchedBlocks?: number[];
@@ -11,7 +13,7 @@ interface VerifyStepProps {
 
 const SPINNER_FRAMES = ['|', '/', '-', '\\'];
 
-export function VerifyStep({ onContinue, isLoading, success, mismatchedBlocks }: VerifyStepProps) {
+export function VerifyStep({ onContinue, onRetryWrite, onReset, isLoading, success, mismatchedBlocks }: VerifyStepProps) {
   const sfx = useSfx();
   const [spinnerIdx, setSpinnerIdx] = useState(0);
 
@@ -23,6 +25,15 @@ export function VerifyStep({ onContinue, isLoading, success, mismatchedBlocks }:
     }, 100);
     return () => clearInterval(timer);
   }, [isLoading]);
+
+  const buttonStyle: React.CSSProperties = {
+    background: 'var(--bg-void)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '13px',
+    fontWeight: 600,
+    padding: '6px 20px',
+    cursor: 'pointer',
+  };
 
   return (
     <TerminalPanel title="VERIFY">
@@ -39,11 +50,31 @@ export function VerifyStep({ onContinue, isLoading, success, mismatchedBlocks }:
         ) : (
           <div>
             {success === true ? (
-              <div style={{ color: 'var(--green-bright)', fontSize: '16px', fontWeight: 700 }}>
-                [OK] CLONE SUCCESSFUL
-              </div>
+              <>
+                <div style={{ color: 'var(--green-bright)', fontSize: '16px', fontWeight: 700 }}>
+                  [OK] CLONE SUCCESSFUL
+                </div>
+                <button
+                  onClick={() => { sfx.action(); onContinue(); }}
+                  style={{
+                    ...buttonStyle,
+                    marginTop: '16px',
+                    color: 'var(--green-bright)',
+                    border: '2px solid var(--green-bright)',
+                  }}
+                  onMouseEnter={(e) => {
+                    sfx.hover();
+                    e.currentTarget.style.background = 'var(--green-ghost)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-void)';
+                  }}
+                >
+                  {'-->'} CONTINUE
+                </button>
+              </>
             ) : success === false ? (
-              <div>
+              <>
                 <div style={{ color: 'var(--red-bright)', fontSize: '16px', fontWeight: 700 }}>
                   [!!] VERIFICATION FAILED
                 </div>
@@ -52,34 +83,48 @@ export function VerifyStep({ onContinue, isLoading, success, mismatchedBlocks }:
                     Mismatched blocks: {mismatchedBlocks.join(', ')}
                   </div>
                 )}
-              </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                  {onRetryWrite && (
+                    <button
+                      onClick={() => { sfx.action(); onRetryWrite(); }}
+                      style={{
+                        ...buttonStyle,
+                        color: 'var(--amber)',
+                        border: '2px solid var(--amber)',
+                      }}
+                      onMouseEnter={(e) => {
+                        sfx.hover();
+                        e.currentTarget.style.background = 'rgba(255, 184, 0, 0.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'var(--bg-void)';
+                      }}
+                    >
+                      RETRY WRITE
+                    </button>
+                  )}
+                  {onReset && (
+                    <button
+                      onClick={() => { sfx.action(); onReset(); }}
+                      style={{
+                        ...buttonStyle,
+                        color: 'var(--green-bright)',
+                        border: '2px solid var(--green-bright)',
+                      }}
+                      onMouseEnter={(e) => {
+                        sfx.hover();
+                        e.currentTarget.style.background = 'var(--green-ghost)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'var(--bg-void)';
+                      }}
+                    >
+                      RESET
+                    </button>
+                  )}
+                </div>
+              </>
             ) : null}
-
-            {success !== null && success !== undefined && (
-              <button
-                onClick={() => { sfx.action(); onContinue(); }}
-                style={{
-                  marginTop: '16px',
-                  background: 'var(--bg-void)',
-                  color: 'var(--green-bright)',
-                  border: '2px solid var(--green-bright)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  padding: '6px 20px',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  sfx.hover();
-                  e.currentTarget.style.background = 'var(--green-ghost)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-void)';
-                }}
-              >
-                {'-->'} CONTINUE
-              </button>
-            )}
           </div>
         )}
       </div>
