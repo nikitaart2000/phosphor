@@ -160,8 +160,8 @@ export const wizardMachine = setup({
     scanCard: fromPromise<WizardState>(async () => {
       return api.scanCard();
     }),
-    confirmBlank: fromPromise<WizardState>(async () => {
-      return api.confirmBlank();
+    detectBlank: fromPromise<WizardState, WizardContext>(async ({ input }) => {
+      return api.detectBlank(input.port!);
     }),
     writeClone: fromPromise<WizardState, WizardContext>(async ({ input }) => {
       return api.writeCloneWithData(
@@ -177,6 +177,7 @@ export const wizardMachine = setup({
         input.port!,
         input.cardData!.uid,
         input.cardType!,
+        input.cardData!.decoded,
       );
     }),
     resetBackend: fromPromise<WizardState>(async () => {
@@ -327,7 +328,8 @@ export const wizardMachine = setup({
 
     waitingForBlank: {
       invoke: {
-        src: 'confirmBlank',
+        src: 'detectBlank',
+        input: ({ context }: { context: WizardContext }) => context,
         onDone: [
           {
             guard: ({ event }) => event.output.step === 'BlankDetected',

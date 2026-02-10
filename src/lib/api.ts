@@ -28,14 +28,11 @@ export async function scanCard(): Promise<WizardState> {
 }
 
 /**
- * Confirm blank card placement via wizard_action ProceedToWrite.
- * The backend doesn't have a standalone confirm_blank command;
- * this is handled by the wizard FSM action.
+ * Detect blank card on reader.
+ * Runs lf t55xx detect (for T5577) or lf em 4x05 info (for EM4305) on the backend.
  */
-export async function confirmBlank(): Promise<WizardState> {
-  return invoke<WizardState>('wizard_action', {
-    action: { action: 'ProceedToWrite' },
-  });
+export async function detectBlank(port: string): Promise<WizardState> {
+  return invoke<WizardState>('detect_blank', { port });
 }
 
 /**
@@ -61,16 +58,19 @@ export async function writeCloneWithData(
 /**
  * Verify the written clone against source data.
  * Reads back the blank and compares block-by-block.
+ * Pass sourceDecoded to enable field-by-field verification.
  */
 export async function verifyCloneWithData(
   port: string,
   sourceUid: string,
   sourceCardType: string,
+  sourceDecoded?: Record<string, string>,
 ): Promise<WizardState> {
   return invoke<WizardState>('verify_clone', {
     port,
     source_uid: sourceUid,
     source_card_type: sourceCardType,
+    source_decoded: sourceDecoded,
   });
 }
 
