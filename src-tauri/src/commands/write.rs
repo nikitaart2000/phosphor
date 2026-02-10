@@ -245,6 +245,7 @@ pub async fn verify_clone(
     source_uid: String,
     source_card_type: CardType,
     source_decoded: Option<std::collections::HashMap<String, String>>,
+    blank_type: Option<BlankType>,
     machine: State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Use type-specific reader command instead of generic lf search
@@ -274,6 +275,8 @@ pub async fn verify_clone(
         };
 
         let display = source_card_type.display_name().to_string();
+        let blank = blank_type.unwrap_or_else(|| source_card_type.recommended_blank());
+        let blank_name = blank.display_name().to_string();
         m.transition(WizardAction::MarkComplete {
             source: CardSummary {
                 card_type: display.clone(),
@@ -281,9 +284,9 @@ pub async fn verify_clone(
                 display_name: format!("{} clone source", display),
             },
             target: CardSummary {
-                card_type: "T5577".to_string(),
+                card_type: blank_name.clone(),
                 uid: target_uid,
-                display_name: "T5577 clone".to_string(),
+                display_name: format!("{} clone", blank_name),
             },
         })?;
     }

@@ -82,8 +82,9 @@ async fn detect_t5577(
     }
 }
 
-/// Detect an EM4305 blank by running `lf em 4x05 info`.
-/// If the command succeeds (exit code 0), we assume the blank is present.
+/// Detect an EM4305 blank by running `lf em 4x05 info` and parsing the output.
+/// Checks for EM4x05-specific strings in the output to confirm the chip is present,
+/// rather than relying solely on the exit code.
 async fn detect_em4305(
     app: &AppHandle,
     port: &str,
@@ -91,29 +92,41 @@ async fn detect_em4305(
 ) -> Result<WizardState, AppError> {
     let result = connection::run_command(app, port, "lf em 4x05 info").await;
 
-    match result {
-        Ok(_) => {
-            let mut m = machine.lock().map_err(|e| {
-                AppError::CommandFailed(format!("State lock poisoned: {}", e))
-            })?;
-            m.transition(WizardAction::BlankReady {
-                blank_type: BlankType::EM4305,
-            })?;
-            Ok(m.current.clone())
+    let detected = match &result {
+        Ok(output) => {
+            let clean = output.to_lowercase();
+            // Confirm EM4x05/EM4305 chip by checking for known markers in the output.
+            // Proxmark3 `lf em 4x05 info` outputs lines like:
+            //   "EM4x05/EM4x69"  or  "Chip Type:   EM4305"  or  "UID:"
+            clean.contains("em4x05")
+                || clean.contains("em4x69")
+                || clean.contains("em4305")
+                || clean.contains("em4469")
+                || (clean.contains("chip") && clean.contains("uid"))
         }
-        Err(_) => {
-            let mut m = machine.lock().map_err(|e| {
-                AppError::CommandFailed(format!("State lock poisoned: {}", e))
-            })?;
-            m.transition(WizardAction::ReportError {
-                message: "EM4305 blank not detected".to_string(),
-                user_message:
-                    "No EM4305 blank found. Place blank card on the reader and try again."
-                        .to_string(),
-                recoverable: true,
-                recovery_action: Some(RecoveryAction::Retry),
-            })?;
-            Ok(m.current.clone())
-        }
+        Err(_) => false,
+    };
+
+    if detected {
+        let mut m = machine.lock().map_err(|e| {
+            AppError::CommandFailed(format!("State lock poisoned: {}", e))
+        })?;
+        m.transition(WizardAction::BlankReady {
+            blank_type: BlankType::EM4305,
+        })?;
+        Ok(m.current.clone())
+    } else {
+        let mut m = machine.lock().map_err(|e| {
+            AppError::CommandFailed(format!("State lock poisoned: {}", e))
+        })?;
+        m.transition(WizardAction::ReportError {
+            message: "EM4305 blank not detected".to_string(),
+            user_message:
+                "No EM4305 blank found. Place blank card on the reader and try again."
+                    .to_string(),
+            recoverable: true,
+            recovery_action: Some(RecoveryAction::Retry),
+        })?;
+        Ok(m.current.clone())
     }
 }

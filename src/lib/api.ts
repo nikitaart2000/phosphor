@@ -65,12 +65,14 @@ export async function verifyCloneWithData(
   sourceUid: string,
   sourceCardType: string,
   sourceDecoded?: Record<string, string>,
+  blankType?: string,
 ): Promise<WizardState> {
   return invoke<WizardState>('verify_clone', {
     port,
     source_uid: sourceUid,
     source_card_type: sourceCardType,
     source_decoded: sourceDecoded,
+    blank_type: blankType,
   });
 }
 

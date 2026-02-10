@@ -178,6 +178,7 @@ export const wizardMachine = setup({
         input.cardData!.uid,
         input.cardType!,
         input.cardData!.decoded,
+        input.blankType ?? undefined,
       );
     }),
     resetBackend: fromPromise<WizardState>(async () => {
