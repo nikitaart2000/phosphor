@@ -1,13 +1,22 @@
 import { TerminalPanel } from '../shared/TerminalPanel';
 import { useSfx } from '../../hooks/useSfx';
+import type { CardType, CardData } from '../../machines/types';
 
 interface CompleteStepProps {
   onReset: () => void;
+  cardType?: CardType | null;
+  cardData?: CardData | null;
+  timestamp?: string | null;
 }
 
-export function CompleteStep({ onReset }: CompleteStepProps) {
+export function CompleteStep({ onReset, cardType, cardData, timestamp }: CompleteStepProps) {
   const sfx = useSfx();
-  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+  const displayType = cardType || 'Unknown';
+  const displayUid = cardData?.uid || 'N/A';
+  const displayTime = timestamp
+    ? timestamp.replace('T', ' ').slice(0, 19)
+    : new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   return (
     <TerminalPanel title="COMPLETE">
@@ -17,13 +26,13 @@ export function CompleteStep({ onReset }: CompleteStepProps) {
         </div>
 
         <div style={{ color: 'var(--green-dim)' }}>
-          SOURCE : EM4100 / 0x1A2B3C4D5E
+          SOURCE : {displayType} / {displayUid}
         </div>
         <div style={{ color: 'var(--green-dim)' }}>
-          TARGET : T5577 (clone)
+          TARGET : Clone (verified)
         </div>
         <div style={{ color: 'var(--green-dim)' }}>
-          TIME   : {timestamp}
+          TIME   : {displayTime}
         </div>
         <div style={{ color: 'var(--green-dim)' }}>
           STATUS : VERIFIED

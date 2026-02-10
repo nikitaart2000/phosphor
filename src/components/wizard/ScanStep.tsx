@@ -1,49 +1,57 @@
 import { useState, useEffect, useRef } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
 import { useSfx } from '../../hooks/useSfx';
+import type { CardData, CardType, Frequency } from '../../machines/types';
 
 interface ScanStepProps {
+  device: { model: string; port: string; firmware: string };
   onScanned: () => void;
+  isLoading?: boolean;
+  cardData?: CardData | null;
+  cardType?: CardType | null;
+  frequency?: Frequency | null;
+  cloneable?: boolean;
 }
 
 const SPINNER_FRAMES = ['|', '/', '-', '\\'];
 
-export function ScanStep({ onScanned }: ScanStepProps) {
+export function ScanStep({
+  device,
+  onScanned,
+  isLoading,
+  cardData,
+  cardType,
+  frequency,
+  cloneable,
+}: ScanStepProps) {
   const sfx = useSfx();
-  const [scanning, setScanning] = useState(false);
-  const [scanned, setScanned] = useState(false);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
   const [pulseOn, setPulseOn] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Border pulse animation on hover
+  // Border pulse animation when idle (not scanning, no result)
   useEffect(() => {
-    if (scanning) return;
+    if (isLoading || cardData) return;
     const timer = setInterval(() => setPulseOn(p => !p), 800);
     return () => clearInterval(timer);
-  }, [scanning]);
+  }, [isLoading, cardData]);
 
   // Spinner for scanning state
   useEffect(() => {
-    if (!scanning) return;
+    if (!isLoading) return;
     intervalRef.current = setInterval(() => {
       setSpinnerIdx(prev => (prev + 1) % SPINNER_FRAMES.length);
     }, 100);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [scanning]);
+  }, [isLoading]);
 
-  const handleScan = () => {
-    setScanning(true);
-    // Simulate scan for 2.5s
-    setTimeout(() => {
-      setScanning(false);
-      setScanned(true);
-    }, 2500);
-  };
+  // Card has been identified -- show results
+  if (cardData && cardType) {
+    const freqLabel = frequency === 'LF' ? '125 kHz (LF)' : frequency === 'HF' ? '13.56 MHz (HF)' : 'Unknown';
+    const decodedEntries = cardData.decoded ? Object.entries(cardData.decoded) : [];
 
-  if (scanned) {
     return (
       <TerminalPanel title="SCAN RESULT">
         <div style={{ fontSize: '13px', lineHeight: '1.8' }}>
@@ -51,70 +59,96 @@ export function ScanStep({ onScanned }: ScanStepProps) {
             [+] Card detected
           </div>
           <div style={{ color: 'var(--green-dim)', marginTop: '8px' }}>
-            TYPE   : EM4100
+            TYPE   : {cardType}
           </div>
           <div style={{ color: 'var(--green-dim)' }}>
-            UID    : 0x1A2B3C4D5E
+            UID    : {cardData.uid}
           </div>
           <div style={{ color: 'var(--green-dim)' }}>
-            FREQ   : 125 kHz (LF)
+            FREQ   : {freqLabel}
           </div>
-          <div style={{ color: 'var(--green-dim)' }}>
-            BITS   : 40
-          </div>
-          <div style={{ marginTop: '16px' }}>
-            <button
-              onClick={() => { sfx.action(); onScanned(); }}
-              style={{
-                background: 'var(--bg-void)',
-                color: 'var(--green-bright)',
-                border: '2px solid var(--green-bright)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '13px',
-                fontWeight: 600,
-                padding: '6px 20px',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={(e) => {
-                sfx.hover();
-                e.currentTarget.style.background = 'var(--green-ghost)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--bg-void)';
-              }}
-            >
-              {'-->'} CONTINUE TO WRITE
-            </button>
-          </div>
+          {decodedEntries.map(([key, value]) => (
+            <div key={key} style={{ color: 'var(--green-dim)' }}>
+              {key.toUpperCase().padEnd(7)}: {value}
+            </div>
+          ))}
+
+          {cloneable === false && (
+            <div style={{ color: 'var(--amber)', marginTop: '12px', fontWeight: 600 }}>
+              [!!] This card type cannot be cloned
+            </div>
+          )}
+
+          {cloneable !== false && (
+            <div style={{ marginTop: '16px' }}>
+              <button
+                onClick={() => { sfx.action(); onScanned(); }}
+                style={{
+                  background: 'var(--bg-void)',
+                  color: 'var(--green-bright)',
+                  border: '2px solid var(--green-bright)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  padding: '6px 20px',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  sfx.hover();
+                  e.currentTarget.style.background = 'var(--green-ghost)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-void)';
+                }}
+              >
+                {'-->'} CONTINUE TO WRITE
+              </button>
+            </div>
+          )}
         </div>
       </TerminalPanel>
     );
   }
 
+  // Scanning or waiting to scan
   return (
     <div style={{ textAlign: 'center' }}>
+      {/* Device info banner */}
+      <div style={{
+        fontSize: '11px',
+        color: 'var(--green-dim)',
+        marginBottom: '16px',
+        lineHeight: '1.6',
+      }}>
+        <span>{device.model}</span>
+        <span style={{ margin: '0 8px' }}>|</span>
+        <span>{device.port}</span>
+        <span style={{ margin: '0 8px' }}>|</span>
+        <span>{device.firmware}</span>
+      </div>
+
       <button
-        onClick={() => { if (!scanning) sfx.action(); handleScan(); }}
-        disabled={scanning}
+        onClick={() => { if (!isLoading) sfx.action(); if (!isLoading) onScanned(); }}
+        disabled={isLoading}
         style={{
-          background: scanning ? 'var(--bg-surface)' : 'var(--bg-void)',
+          background: isLoading ? 'var(--bg-surface)' : 'var(--bg-void)',
           color: 'var(--green-bright)',
-          border: `2px solid ${pulseOn && !scanning ? 'var(--green-mid)' : 'var(--green-bright)'}`,
+          border: `2px solid ${pulseOn && !isLoading ? 'var(--green-mid)' : 'var(--green-bright)'}`,
           fontFamily: 'var(--font-mono)',
           fontSize: '20px',
           fontWeight: 700,
           padding: '16px 48px',
-          cursor: scanning ? 'default' : 'pointer',
+          cursor: isLoading ? 'default' : 'pointer',
           transition: 'border-color 0.3s, background 0.2s',
         }}
         onMouseEnter={(e) => {
-          if (!scanning) { sfx.hover(); e.currentTarget.style.background = 'var(--green-ghost)'; }
+          if (!isLoading) { sfx.hover(); e.currentTarget.style.background = 'var(--green-ghost)'; }
         }}
         onMouseLeave={(e) => {
-          if (!scanning) e.currentTarget.style.background = 'var(--bg-void)';
+          if (!isLoading) e.currentTarget.style.background = 'var(--bg-void)';
         }}
       >
-        {scanning
+        {isLoading
           ? `[ SCANNING ${SPINNER_FRAMES[spinnerIdx]} ]`
           : '[ SCAN ]'}
       </button>
@@ -123,7 +157,7 @@ export function ScanStep({ onScanned }: ScanStepProps) {
         fontSize: '12px',
         color: 'var(--green-dim)',
       }}>
-        {scanning ? 'Hold card on reader...' : 'Place card on reader and press SCAN'}
+        {isLoading ? 'Hold card on reader...' : 'Place card on reader and press SCAN'}
       </div>
     </div>
   );

@@ -1,53 +1,50 @@
 import { useState, useEffect } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
 import { useSfx } from '../../hooks/useSfx';
+import type { BlankType } from '../../machines/types';
 
 interface BlankStepProps {
   onReady: () => void;
+  isLoading?: boolean;
+  expectedBlank?: BlankType | null;
+  blankType?: BlankType | null;
 }
 
 const DETECT_FRAMES = ['.  ', '.. ', '...', ' ..', '  .', '   '];
 
-export function BlankStep({ onReady }: BlankStepProps) {
+export function BlankStep({ onReady, isLoading, expectedBlank, blankType }: BlankStepProps) {
   const sfx = useSfx();
-  const [detecting, setDetecting] = useState(true);
   const [frameIdx, setFrameIdx] = useState(0);
 
-  // Animate detection dots
+  // Animate detection dots while loading
   useEffect(() => {
-    if (!detecting) return;
+    if (!isLoading) return;
     const timer = setInterval(() => {
       setFrameIdx(prev => (prev + 1) % DETECT_FRAMES.length);
     }, 300);
     return () => clearInterval(timer);
-  }, [detecting]);
+  }, [isLoading]);
 
-  // Simulate blank detection after 3s
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDetecting(false);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
+  const blankLabel = expectedBlank || 'T5577';
 
   return (
     <TerminalPanel title="BLANK CARD">
       <div style={{ fontSize: '13px', lineHeight: '1.8' }}>
         <div style={{ color: 'var(--amber)', marginBottom: '12px' }}>
-          [!!] Remove source fob. Place a T5577 blank on the reader.
+          [!!] Remove source fob. Place a {blankLabel} blank on the reader.
         </div>
 
-        {detecting ? (
+        {isLoading ? (
           <div style={{ color: 'var(--green-dim)' }}>
             DETECTING{DETECT_FRAMES[frameIdx]}
           </div>
-        ) : (
+        ) : blankType ? (
           <>
             <div style={{ color: 'var(--green-bright)' }}>
-              [+] T5577 blank detected
+              [+] {blankType} blank detected
             </div>
             <div style={{ color: 'var(--green-dim)', marginTop: '4px' }}>
-              TYPE : T5577 (writable)
+              TYPE : {blankType} (writable)
             </div>
             <div style={{ color: 'var(--green-dim)' }}>
               STATE: BLANK
@@ -77,6 +74,10 @@ export function BlankStep({ onReady }: BlankStepProps) {
               </button>
             </div>
           </>
+        ) : (
+          <div style={{ color: 'var(--green-dim)' }}>
+            Waiting for {blankLabel} blank...
+          </div>
         )}
       </div>
     </TerminalPanel>
