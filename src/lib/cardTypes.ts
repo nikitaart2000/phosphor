@@ -279,17 +279,17 @@ export const BLANK_DISPLAY: Record<BlankType, BlankDisplayInfo> = {
 // Used to render decoded data in the card detail view.
 export const CARD_DECODED_FIELDS: Partial<Record<CardType, string[]>> = {
   EM4100: ['id'],
-  HIDProx: ['facility_code', 'card_number', 'raw', 'wiegand_format'],
+  HIDProx: ['facility_code', 'card_number', 'raw', 'format'],
   Indala: ['id', 'raw'],
   AWID: ['facility_code', 'card_number', 'format'],
-  IOProx: ['version_number', 'facility_code', 'card_number'],
-  FDX_B: ['country', 'national_id', 'animal'],
+  IOProx: ['facility_code', 'card_number', 'version'],
+  FDX_B: ['country', 'national_id'],
   Paradox: ['facility_code', 'card_number', 'raw'],
   Pyramid: ['facility_code', 'card_number', 'raw'],
-  Keri: ['id', 'type'],
+  Keri: ['raw', 'keri_type'],
   NexWatch: ['raw'],
   Viking: ['card_number'],
-  Presco: ['hex_data', 'sitecode', 'usercode'],
+  Presco: ['site_code', 'user_code', 'hex'],
   Nedap: ['subtype', 'card_number'],
   GProxII: ['xsf', 'card_number'],
   Gallagher: ['region_code', 'facility_code', 'card_number', 'issue_level'],
@@ -300,6 +300,10 @@ export const CARD_DECODED_FIELDS: Partial<Record<CardType, string[]>> = {
   Visa2000: ['card_number'],
   Motorola: ['raw'],
   IDTECK: ['raw'],
+  // Non-cloneable LF (detected but cannot be cloned)
+  COTAG: [],
+  EM4x50: [],
+  Hitag: [],
 };
 
 /**
