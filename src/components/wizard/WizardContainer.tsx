@@ -4,29 +4,125 @@ import { BlankStep } from './BlankStep';
 import { WriteStep } from './WriteStep';
 import { VerifyStep } from './VerifyStep';
 import { CompleteStep } from './CompleteStep';
+import { ErrorStep } from './ErrorStep';
+import { useWizard } from '../../hooks/useWizard';
 
-export type WizardStep = 'connect' | 'scan' | 'blank' | 'write' | 'verify' | 'complete';
+export function WizardContainer() {
+  const wizard = useWizard();
 
-interface WizardContainerProps {
-  currentStep: WizardStep;
-  onStepChange: (step: WizardStep) => void;
-}
-
-export function WizardContainer({ currentStep, onStepChange }: WizardContainerProps) {
   const renderStep = () => {
-    switch (currentStep) {
-      case 'connect':
-        return <ConnectStep onConnected={() => onStepChange('scan')} />;
-      case 'scan':
-        return <ScanStep onScanned={() => onStepChange('blank')} />;
-      case 'blank':
-        return <BlankStep onReady={() => onStepChange('write')} />;
-      case 'write':
-        return <WriteStep onComplete={() => onStepChange('verify')} />;
-      case 'verify':
-        return <VerifyStep onContinue={() => onStepChange('complete')} />;
-      case 'complete':
-        return <CompleteStep onReset={() => onStepChange('connect')} />;
+    switch (wizard.currentStep) {
+      case 'Idle':
+        return <ConnectStep onConnected={wizard.detect} isLoading={false} />;
+      case 'DetectingDevice':
+        return <ConnectStep onConnected={wizard.detect} isLoading={true} />;
+      case 'DeviceConnected':
+        return (
+          <ScanStep
+            device={{
+              model: wizard.context.model!,
+              port: wizard.context.port!,
+              firmware: wizard.context.firmware!,
+            }}
+            onScanned={wizard.scan}
+            isLoading={false}
+          />
+        );
+      case 'ScanningCard':
+        return (
+          <ScanStep
+            device={{
+              model: wizard.context.model!,
+              port: wizard.context.port!,
+              firmware: wizard.context.firmware!,
+            }}
+            onScanned={wizard.scan}
+            isLoading={true}
+          />
+        );
+      case 'CardIdentified':
+        return (
+          <ScanStep
+            device={{
+              model: wizard.context.model!,
+              port: wizard.context.port!,
+              firmware: wizard.context.firmware!,
+            }}
+            cardData={wizard.context.cardData}
+            cardType={wizard.context.cardType}
+            frequency={wizard.context.frequency}
+            cloneable={wizard.context.cloneable}
+            onScanned={() => wizard.skipToBlank(wizard.context.recommendedBlank!)}
+            isLoading={false}
+          />
+        );
+      case 'WaitingForBlank':
+        return (
+          <BlankStep
+            expectedBlank={wizard.context.expectedBlank}
+            isLoading={true}
+            onReady={() => {}}
+          />
+        );
+      case 'BlankDetected':
+        return (
+          <BlankStep
+            expectedBlank={wizard.context.expectedBlank}
+            blankType={wizard.context.blankType}
+            isLoading={false}
+            onReady={wizard.write}
+          />
+        );
+      case 'Writing':
+        return (
+          <WriteStep
+            progress={wizard.context.writeProgress}
+            currentBlock={wizard.context.currentBlock}
+            totalBlocks={wizard.context.totalBlocks}
+            cardType={wizard.context.cardType}
+            isLoading={true}
+            onComplete={() => {}}
+          />
+        );
+      case 'Verifying':
+        return (
+          <VerifyStep
+            isLoading={true}
+            onContinue={() => {}}
+          />
+        );
+      case 'VerificationComplete':
+        return (
+          <VerifyStep
+            success={wizard.context.verifySuccess}
+            mismatchedBlocks={wizard.context.mismatchedBlocks}
+            isLoading={false}
+            onContinue={wizard.finish}
+          />
+        );
+      case 'Complete':
+        return (
+          <CompleteStep
+            cardType={wizard.context.cardType}
+            cardData={wizard.context.cardData}
+            timestamp={wizard.context.completionTimestamp}
+            onReset={wizard.reset}
+          />
+        );
+      case 'Error':
+        return (
+          <ErrorStep
+            message={wizard.context.errorUserMessage}
+            recoverable={wizard.context.errorRecoverable}
+            recoveryAction={wizard.context.errorRecoveryAction}
+            onRetry={() => {
+              if (wizard.context.errorRecoveryAction === 'Reconnect') wizard.detect();
+              else if (wizard.context.errorRecoveryAction === 'Retry') wizard.scan();
+              else wizard.reset();
+            }}
+            onReset={wizard.reset}
+          />
+        );
     }
   };
 

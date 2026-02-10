@@ -1,111 +1,79 @@
-import { useState, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
 import { ProgressBar } from '../shared/ProgressBar';
 import { StepIndicator, type Step } from '../shared/StepIndicator';
-import { OperationLog, type LogEntry } from '../shared/OperationLog';
+import type { CardType } from '../../machines/types';
 
 interface WriteStepProps {
   onComplete: () => void;
+  isLoading?: boolean;
+  progress?: number;
+  currentBlock?: number | null;
+  totalBlocks?: number | null;
+  cardType?: CardType | null;
 }
 
-export function WriteStep({ onComplete }: WriteStepProps) {
-  const [progress, setProgress] = useState(0);
-  const [steps, setSteps] = useState<Step[]>([
-    { label: 'PREPARE BLANK', status: 'pending' },
-    { label: 'WRITE DATA', status: 'pending' },
-    { label: 'LOCK CONFIG', status: 'pending' },
-    { label: 'FINALIZE', status: 'pending' },
-  ]);
-  const [logLines, setLogLines] = useState<LogEntry[]>([]);
-  const completedRef = useRef(false);
+// Derive step statuses from the progress percentage
+function getPhaseSteps(progress: number): Step[] {
+  // DETECT (0-10%), SAFETY CHECK (10-25%), WIPE (25-50%), CLONE (50-75%), FINALIZE (75-100%)
+  const phases: { label: string; start: number; end: number }[] = [
+    { label: 'DETECT BLANK', start: 0, end: 10 },
+    { label: 'SAFETY CHECK', start: 10, end: 25 },
+    { label: 'WIPE', start: 25, end: 50 },
+    { label: 'CLONE DATA', start: 50, end: 75 },
+    { label: 'FINALIZE', start: 75, end: 100 },
+  ];
 
-  useEffect(() => {
-    const addLog = (entry: LogEntry) => {
-      setLogLines(prev => [...prev, entry]);
-    };
+  return phases.map(({ label, start, end }): Step => {
+    if (progress >= end) {
+      return { label, status: 'ok' };
+    } else if (progress >= start) {
+      return { label, status: 'running' };
+    } else {
+      return { label, status: 'pending' };
+    }
+  });
+}
 
-    const updateStep = (idx: number, status: Step['status']) => {
-      setSteps(prev => prev.map((s, i) => (i === idx ? { ...s, status } : s)));
-    };
+export function WriteStep({
+  onComplete: _onComplete,
+  isLoading,
+  progress = 0,
+  currentBlock,
+  totalBlocks,
+  cardType,
+}: WriteStepProps) {
+  const steps = useMemo(() => getPhaseSteps(progress), [progress]);
 
-    // Phase 1: PREPARE (0-25%)
-    const t1 = setTimeout(() => {
-      updateStep(0, 'running');
-      addLog({ prefix: '=', text: 'Preparing T5577 blank...' });
-    }, 200);
-
-    const t2 = setTimeout(() => {
-      setProgress(15);
-      addLog({ prefix: '+', text: 'lf t55xx detect -- T5577 found' });
-    }, 800);
-
-    const t3 = setTimeout(() => {
-      setProgress(25);
-      updateStep(0, 'ok');
-      addLog({ prefix: '+', text: 'Blank ready for write' });
-    }, 1200);
-
-    // Phase 2: WRITE (25-60%)
-    const t4 = setTimeout(() => {
-      updateStep(1, 'running');
-      addLog({ prefix: '=', text: 'Writing EM4100 data to T5577...' });
-    }, 1400);
-
-    const t5 = setTimeout(() => {
-      setProgress(40);
-      addLog({ prefix: '+', text: 'lf em 410x clone --id 1A2B3C4D5E' });
-    }, 2000);
-
-    const t6 = setTimeout(() => {
-      setProgress(60);
-      updateStep(1, 'ok');
-      addLog({ prefix: '+', text: 'Data written successfully' });
-    }, 2800);
-
-    // Phase 3: LOCK (60-80%)
-    const t7 = setTimeout(() => {
-      updateStep(2, 'running');
-      addLog({ prefix: '=', text: 'Configuring modulation...' });
-    }, 3000);
-
-    const t8 = setTimeout(() => {
-      setProgress(80);
-      updateStep(2, 'ok');
-      addLog({ prefix: '+', text: 'Config block set: ASK/Manchester' });
-    }, 3600);
-
-    // Phase 4: FINALIZE (80-100%)
-    const t9 = setTimeout(() => {
-      updateStep(3, 'running');
-      addLog({ prefix: '=', text: 'Finalizing...' });
-    }, 3800);
-
-    const t10 = setTimeout(() => {
-      setProgress(100);
-      updateStep(3, 'ok');
-      addLog({ prefix: '+', text: 'Write complete' });
-    }, 4200);
-
-    const t11 = setTimeout(() => {
-      if (!completedRef.current) {
-        completedRef.current = true;
-        onComplete();
-      }
-    }, 4500);
-
-    return () => {
-      [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11].forEach(clearTimeout);
-    };
-  }, [onComplete]);
+  const blockInfo = currentBlock !== null && currentBlock !== undefined && totalBlocks
+    ? `Block ${currentBlock}/${totalBlocks}`
+    : null;
 
   return (
     <TerminalPanel title="WRITING">
-      <div style={{ marginBottom: '16px' }}>
-        <ProgressBar value={progress} width={24} />
-      </div>
-      <StepIndicator steps={steps} />
-      <div style={{ marginTop: '16px' }}>
-        <OperationLog lines={logLines} maxHeight={120} />
+      <div style={{ fontSize: '13px', lineHeight: '1.8' }}>
+        {cardType && (
+          <div style={{ color: 'var(--green-dim)', marginBottom: '8px' }}>
+            Cloning {cardType} to blank...
+          </div>
+        )}
+
+        <div style={{ marginBottom: '16px' }}>
+          <ProgressBar value={progress} width={24} />
+          {blockInfo && (
+            <span style={{ color: 'var(--green-dim)', fontSize: '12px', marginLeft: '12px' }}>
+              {blockInfo}
+            </span>
+          )}
+        </div>
+
+        <StepIndicator steps={steps} />
+
+        {isLoading && progress >= 100 && (
+          <div style={{ color: 'var(--green-bright)', marginTop: '12px', fontWeight: 600 }}>
+            [+] Write complete -- verifying...
+          </div>
+        )}
       </div>
     </TerminalPanel>
   );

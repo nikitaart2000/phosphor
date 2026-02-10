@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { TopBar } from './TopBar';
 import { Sidebar, type TabId } from './Sidebar';
 import { StatusBar, type SystemStatus } from './StatusBar';
-import { WizardContainer, type WizardStep } from '../wizard/WizardContainer';
+import { WizardContainer } from '../wizard/WizardContainer';
 import { HistoryView } from '../history/HistoryView';
 import { useMusic } from '../../hooks/useMusic';
 
 export function MainLayout() {
   const [activeTab, setActiveTab] = useState<TabId>('scan');
-  const [wizardStep, setWizardStep] = useState<WizardStep>('connect');
   const [status] = useState<SystemStatus>('ready');
   const { enabled: musicEnabled, toggle: toggleMusic } = useMusic();
 
@@ -16,12 +15,7 @@ export function MainLayout() {
     switch (activeTab) {
       case 'scan':
       case 'write':
-        return (
-          <WizardContainer
-            currentStep={wizardStep}
-            onStepChange={setWizardStep}
-          />
-        );
+        return <WizardContainer />;
       case 'history':
         return (
           <div style={{ padding: '24px', position: 'relative', zIndex: 5 }}>
