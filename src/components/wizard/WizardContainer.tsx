@@ -116,8 +116,11 @@ export function WizardContainer() {
             message={wizard.context.errorUserMessage}
             recoverable={wizard.context.errorRecoverable}
             recoveryAction={wizard.context.errorRecoveryAction}
+            errorSource={wizard.context.errorSource}
             onRetry={() => {
               if (wizard.context.errorRecoveryAction === 'Reconnect') wizard.detect();
+              else if (wizard.context.errorRecoveryAction === 'Retry' &&
+                       (wizard.context.errorSource === 'write' || wizard.context.errorSource === 'blank')) wizard.write();
               else if (wizard.context.errorRecoveryAction === 'Retry') wizard.scan();
               else wizard.reset();
             }}

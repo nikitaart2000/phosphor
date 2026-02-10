@@ -6,11 +6,15 @@ interface ErrorStepProps {
   message?: string | null;
   recoverable?: boolean;
   recoveryAction?: RecoveryAction | null;
+  errorSource?: 'scan' | 'write' | 'detect' | 'verify' | 'blank' | null;
   onRetry: () => void;
   onReset: () => void;
 }
 
-function getRetryLabel(action: RecoveryAction | null | undefined): string {
+function getRetryLabel(action: RecoveryAction | null | undefined, source?: string | null): string {
+  if (action === 'Retry' && (source === 'write' || source === 'blank')) {
+    return 'RETRY WRITE';
+  }
   switch (action) {
     case 'Reconnect':
       return 'RECONNECT';
@@ -23,11 +27,11 @@ function getRetryLabel(action: RecoveryAction | null | undefined): string {
   }
 }
 
-export function ErrorStep({ message, recoverable, recoveryAction, onRetry, onReset }: ErrorStepProps) {
+export function ErrorStep({ message, recoverable, recoveryAction, errorSource, onRetry, onReset }: ErrorStepProps) {
   const sfx = useSfx();
 
   const displayMessage = message || 'An unexpected error occurred.';
-  const retryLabel = getRetryLabel(recoveryAction);
+  const retryLabel = getRetryLabel(recoveryAction, errorSource);
 
   return (
     <TerminalPanel title="ERROR">
