@@ -16,7 +16,6 @@ pub enum CardType {
     Indala,
     IOProx,
     AWID,
-    #[serde(rename = "FDX-B")]
     FDX_B,
     Paradox,
     Viking,

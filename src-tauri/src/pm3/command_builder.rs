@@ -71,9 +71,10 @@ pub fn build_em4100_clone(id: &str) -> String {
     format!("lf em 410x clone --id {}", id)
 }
 
-/// HID clone using H10301 Wiegand format (26-bit standard).
-pub fn build_hid_clone(fc: u32, cn: u32) -> String {
-    format!("lf hid clone -w H10301 --fc {} --cn {}", fc, cn)
+/// HID clone using detected Wiegand format (defaults to H10301 / 26-bit).
+pub fn build_hid_clone(fc: u32, cn: u32, format: Option<&str>) -> String {
+    let wiegand = format.unwrap_or("H10301");
+    format!("lf hid clone -w {} --fc {} --cn {}", wiegand, fc, cn)
 }
 
 pub fn build_hid_clone_raw(raw: &str) -> String {
@@ -270,7 +271,8 @@ pub fn build_clone_command(
                 (decoded.get("facility_code"), decoded.get("card_number"))
             {
                 if let (Ok(fc_n), Ok(cn_n)) = (fc.parse::<u32>(), cn.parse::<u32>()) {
-                    return Some(build_hid_clone(fc_n, cn_n));
+                    let fmt = decoded.get("format").map(|s| s.as_str());
+                    return Some(build_hid_clone(fc_n, cn_n, fmt));
                 }
             }
             decoded.get("raw").map(|raw| build_hid_clone_raw(raw))

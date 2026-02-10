@@ -999,7 +999,14 @@ pub fn verify_match_detailed(
             _ => true, // If either doesn't have raw, skip raw comparison
         };
 
-        if fc_match && cn_match && raw_match {
+        // For id-based types (e.g. EM4100), compare the id field
+        let id_match = match (source_decoded.get("id"), clone_data.decoded.get("id")) {
+            (Some(src), Some(dst)) => src.eq_ignore_ascii_case(dst),
+            (None, None) => true,
+            _ => false,
+        };
+
+        if fc_match && cn_match && raw_match && id_match {
             (true, vec![])
         } else {
             let mut mismatched = vec![];
@@ -1011,6 +1018,9 @@ pub fn verify_match_detailed(
             }
             if !raw_match {
                 mismatched.push(0);
+            }
+            if !id_match {
+                mismatched.push(3);
             }
             (false, mismatched)
         }
