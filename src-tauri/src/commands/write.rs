@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::cards::types::{BlankType, CardSummary, CardType, RecoveryAction};
+use crate::cards::types::{BlankType, CardType, RecoveryAction};
 use crate::error::AppError;
 use crate::pm3::{command_builder, connection, output_parser};
 use crate::state::{WizardAction, WizardMachine, WizardState};
@@ -51,13 +51,45 @@ pub async fn write_clone_with_data(
         m.transition(WizardAction::StartWrite)?;
     }
 
-    // Branch based on blank type
+    // Branch based on blank type.
+    // Errors from the write flow are caught and reported as FSM Error state
+    // to keep the backend FSM in sync with the frontend XState machine.
     match blank {
         BlankType::T5577 => {
-            write_t5577_flow(&app, &port, &card_type, &uid, &decoded, &machine).await
+            match write_t5577_flow(&app, &port, &card_type, &uid, &decoded, &machine).await {
+                Ok(state) => Ok(state),
+                Err(e) => {
+                    let _ = report_error(
+                        &machine,
+                        &e.to_string(),
+                        "Write operation failed. Do not remove the card.",
+                        true,
+                        Some(RecoveryAction::Retry),
+                    );
+                    let m = machine.lock().map_err(|e| {
+                        AppError::CommandFailed(format!("State lock poisoned: {}", e))
+                    })?;
+                    Ok(m.current.clone())
+                }
+            }
         }
         BlankType::EM4305 => {
-            write_em4305_flow(&app, &port, &card_type, &uid, &decoded, &machine).await
+            match write_em4305_flow(&app, &port, &card_type, &uid, &decoded, &machine).await {
+                Ok(state) => Ok(state),
+                Err(e) => {
+                    let _ = report_error(
+                        &machine,
+                        &e.to_string(),
+                        "Write operation failed. Do not remove the card.",
+                        true,
+                        Some(RecoveryAction::Retry),
+                    );
+                    let m = machine.lock().map_err(|e| {
+                        AppError::CommandFailed(format!("State lock poisoned: {}", e))
+                    })?;
+                    Ok(m.current.clone())
+                }
+            }
         }
         _ => {
             // Other blank types not yet supported for LF
@@ -245,7 +277,7 @@ pub async fn verify_clone(
     source_uid: String,
     source_card_type: CardType,
     source_decoded: Option<std::collections::HashMap<String, String>>,
-    blank_type: Option<BlankType>,
+    _blank_type: Option<BlankType>,
     machine: State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Use type-specific reader command instead of generic lf search
@@ -267,30 +299,10 @@ pub async fn verify_clone(
         mismatched_blocks: mismatched.clone(),
     })?;
 
-    if success {
-        let target_uid = if let Some((_, cd)) = output_parser::parse_lf_search(&verify_output) {
-            cd.uid
-        } else {
-            source_uid.clone()
-        };
-
-        let display = source_card_type.display_name().to_string();
-        let blank = blank_type.unwrap_or_else(|| source_card_type.recommended_blank());
-        let blank_name = blank.display_name().to_string();
-        m.transition(WizardAction::MarkComplete {
-            source: CardSummary {
-                card_type: display.clone(),
-                uid: source_uid,
-                display_name: format!("{} clone source", display),
-            },
-            target: CardSummary {
-                card_type: blank_name.clone(),
-                uid: target_uid,
-                display_name: format!("{} clone", blank_name),
-            },
-        })?;
-    }
-
+    // Return VerificationComplete state to the frontend.
+    // The frontend handles FINISH -> MarkComplete via wizard_action.
+    // Previously this auto-advanced to Complete, causing the frontend
+    // XState guard (which checks for VerificationComplete) to fail.
     Ok(m.current.clone())
 }
 

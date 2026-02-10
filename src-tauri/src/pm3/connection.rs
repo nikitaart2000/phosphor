@@ -1,5 +1,7 @@
+use std::sync::LazyLock;
 use std::time::Duration;
 
+use regex::Regex;
 use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
 use tokio::time::timeout;
@@ -10,16 +12,35 @@ use crate::pm3::output_parser::strip_ansi;
 /// Maximum time to wait for a PM3 subprocess to complete (30 seconds).
 const PM3_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Validates that a port string matches expected serial port patterns.
+/// Accepts COM1-COM99 (Windows), /dev/ttyACM0-99, /dev/ttyUSB0-99 (Linux),
+/// and /dev/tty.usbmodem* (macOS).
+static PORT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(COM\d{1,2}|/dev/tty(ACM|USB)\d{1,2}|/dev/tty\.usbmodem\w+)$")
+        .expect("bad port regex")
+});
+
 /// Run a single PM3 command: spawns `proxmark3 -p {port} -f -c "{cmd}"`,
 /// waits for the process to exit (with a 30-second timeout), then returns cleaned stdout.
 /// If the subprocess hangs (e.g., USB cable pulled), it will be killed after the timeout.
 pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<String, AppError> {
+    // Validate port format to prevent command injection via subprocess args
+    if !PORT_RE.is_match(port) {
+        return Err(AppError::CommandFailed(format!(
+            "Invalid port: {}",
+            port
+        )));
+    }
+
     let output_future = app
         .shell()
         .command("proxmark3")
         .args(["-p", port, "-f", "-c", cmd])
         .output();
 
+    // Note: When the timeout fires and the future is dropped, Tauri's shell plugin
+    // handles cleanup of the child process. The `tokio::time::timeout` wrapper
+    // ensures we don't wait forever, and the Tauri runtime drops the child on cancel.
     let output = timeout(PM3_COMMAND_TIMEOUT, output_future)
         .await
         .map_err(|_| {
