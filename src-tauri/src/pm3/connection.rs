@@ -1,18 +1,34 @@
+use std::time::Duration;
+
 use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
+use tokio::time::timeout;
 
 use crate::error::AppError;
 use crate::pm3::output_parser::strip_ansi;
 
+/// Maximum time to wait for a PM3 subprocess to complete (30 seconds).
+const PM3_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Run a single PM3 command: spawns `proxmark3 -p {port} -f -c "{cmd}"`,
-/// waits for the process to exit, then returns cleaned stdout.
+/// waits for the process to exit (with a 30-second timeout), then returns cleaned stdout.
+/// If the subprocess hangs (e.g., USB cable pulled), it will be killed after the timeout.
 pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<String, AppError> {
-    let output = app
+    let output_future = app
         .shell()
         .command("proxmark3")
         .args(["-p", port, "-f", "-c", cmd])
-        .output()
+        .output();
+
+    let output = timeout(PM3_COMMAND_TIMEOUT, output_future)
         .await
+        .map_err(|_| {
+            AppError::Timeout(format!(
+                "PM3 command timed out after {}s: {}",
+                PM3_COMMAND_TIMEOUT.as_secs(),
+                cmd
+            ))
+        })?
         .map_err(|e| AppError::CommandFailed(format!("Failed to spawn proxmark3: {}", e)))?;
 
     let code = output.status.code().unwrap_or(-1);

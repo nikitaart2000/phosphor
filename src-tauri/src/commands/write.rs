@@ -314,14 +314,16 @@ fn update_progress(
         total_blocks,
     })?;
     // Emit event to frontend for real-time progress updates
-    let _ = app.emit(
+    if let Err(e) = app.emit(
         "write-progress",
         serde_json::json!({
             "progress": progress,
             "current_block": current_block,
             "total_blocks": total_blocks,
         }),
-    );
+    ) {
+        eprintln!("Failed to emit write-progress event: {}", e);
+    }
     Ok(())
 }
 
