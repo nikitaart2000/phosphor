@@ -20,7 +20,7 @@ export function TopBar({ connected }: TopBarProps) {
       }}
     >
       <div style={{ color: 'var(--green-mid)', fontWeight: 600 }}>
-        {'|||'} PHOSPHOR v1.0 {'|||'}
+        PHOSPHOR v1.0
       </div>
       <div
         style={{

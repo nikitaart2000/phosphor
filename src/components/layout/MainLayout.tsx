@@ -4,12 +4,13 @@ import { Sidebar, type TabId } from './Sidebar';
 import { StatusBar, type SystemStatus } from './StatusBar';
 import { WizardContainer, type WizardStep } from '../wizard/WizardContainer';
 import { HistoryView } from '../history/HistoryView';
-import { GlitchWatermark } from '../shared/GlitchWatermark';
+import { useMusic } from '../../hooks/useMusic';
 
 export function MainLayout() {
   const [activeTab, setActiveTab] = useState<TabId>('scan');
   const [wizardStep, setWizardStep] = useState<WizardStep>('connect');
   const [status] = useState<SystemStatus>('ready');
+  const { enabled: musicEnabled, toggle: toggleMusic } = useMusic();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -80,10 +81,9 @@ export function MainLayout() {
 
       {/* StatusBar spans full width */}
       <div style={{ gridColumn: '1 / -1' }}>
-        <StatusBar status={status} />
+        <StatusBar status={status} musicEnabled={musicEnabled} onMusicToggle={toggleMusic} />
       </div>
 
-      <GlitchWatermark />
     </div>
   );
 }

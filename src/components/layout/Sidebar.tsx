@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSfx } from '../../hooks/useSfx';
 
 export type TabId = 'scan' | 'write' | 'history' | 'settings';
 
@@ -34,6 +35,7 @@ function BlinkingCursor() {
 
 export function Sidebar({ activeTab, onTabChange, deviceName, devicePort, firmware }: SidebarProps) {
   const [hoveredTab, setHoveredTab] = useState<TabId | null>(null);
+  const sfx = useSfx();
 
   return (
     <div
@@ -59,8 +61,8 @@ export function Sidebar({ activeTab, onTabChange, deviceName, devicePort, firmwa
           return (
             <div
               key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              onMouseEnter={() => setHoveredTab(tab.id)}
+              onClick={() => { sfx.click(); onTabChange(tab.id); }}
+              onMouseEnter={() => { sfx.hover(); setHoveredTab(tab.id); }}
               onMouseLeave={() => setHoveredTab(null)}
               style={{
                 padding: '4px 12px',

@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useSfx } from '../../hooks/useSfx';
 
 export type SystemStatus = 'ready' | 'busy' | 'error';
 
 interface StatusBarProps {
   status: SystemStatus;
   message?: string;
+  musicEnabled: boolean;
+  onMusicToggle: () => void;
 }
 
 function formatTime(d: Date): string {
@@ -40,7 +43,7 @@ function getStatusDisplay(status: SystemStatus, message?: string) {
   }
 }
 
-export function StatusBar({ status, message }: StatusBarProps) {
+export function StatusBar({ status, message, musicEnabled, onMusicToggle }: StatusBarProps) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -48,6 +51,7 @@ export function StatusBar({ status, message }: StatusBarProps) {
     return () => clearInterval(timer);
   }, []);
 
+  const sfx = useSfx();
   const display = getStatusDisplay(status, message);
 
   return (
@@ -57,7 +61,7 @@ export function StatusBar({ status, message }: StatusBarProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 12px',
+        padding: '0 20px',
         background: 'var(--bg-panel)',
         borderTop: '1px solid var(--green-dim)',
         fontFamily: 'var(--font-mono)',
@@ -69,12 +73,24 @@ export function StatusBar({ status, message }: StatusBarProps) {
       <div style={{ color: display.color }}>
         {display.prefix} {display.text}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ color: 'var(--green-dim)' }}>
-          {'\u2591\u2591\u2591'}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <span
+          onClick={() => { sfx.click(); onMusicToggle(); }}
+          onMouseEnter={sfx.hover}
+          style={{
+            cursor: 'pointer',
+            color: musicEnabled ? 'var(--green-bright)' : 'var(--green-dim)',
+            userSelect: 'none',
+            transition: 'color 0.15s',
+          }}
+          title={musicEnabled ? 'Music ON' : 'Music OFF'}
+        >
+          {musicEnabled ? '[♪ ON]' : '[♪ OFF]'}
         </span>
-        <span style={{ color: 'var(--green-dim)' }}>
-          {formatDate(now)} {formatTime(now)}
+        <span style={{ color: 'var(--green-dim)', letterSpacing: '0.5px' }}>
+          {formatDate(now)}
+          <span style={{ display: 'inline-block', width: '12px' }} />
+          {formatTime(now)}
         </span>
       </div>
     </div>
