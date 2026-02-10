@@ -10,7 +10,7 @@ pub enum Frequency {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum CardType {
-    // LF types
+    // LF cloneable types (22 total)
     EM4100,
     HIDProx,
     Indala,
@@ -23,6 +23,21 @@ pub enum CardType {
     Pyramid,
     Keri,
     NexWatch,
+    Presco,
+    Nedap,
+    GProxII,
+    Gallagher,
+    PAC,
+    Noralsy,
+    Jablotron,
+    SecuraKey,
+    Visa2000,
+    Motorola,
+    IDTECK,
+    // LF non-cloneable types (3)
+    COTAG,
+    EM4x50,
+    Hitag,
     // HF types
     MifareClassic1K,
     MifareClassic4K,
@@ -45,7 +60,21 @@ impl CardType {
             | CardType::Viking
             | CardType::Pyramid
             | CardType::Keri
-            | CardType::NexWatch => Frequency::LF,
+            | CardType::NexWatch
+            | CardType::Presco
+            | CardType::Nedap
+            | CardType::GProxII
+            | CardType::Gallagher
+            | CardType::PAC
+            | CardType::Noralsy
+            | CardType::Jablotron
+            | CardType::SecuraKey
+            | CardType::Visa2000
+            | CardType::Motorola
+            | CardType::IDTECK
+            | CardType::COTAG
+            | CardType::EM4x50
+            | CardType::Hitag => Frequency::LF,
 
             CardType::MifareClassic1K
             | CardType::MifareClassic4K
@@ -69,6 +98,20 @@ impl CardType {
             CardType::Pyramid => "Pyramid",
             CardType::Keri => "Keri",
             CardType::NexWatch => "NexWatch",
+            CardType::Presco => "Presco",
+            CardType::Nedap => "Nedap",
+            CardType::GProxII => "GProx II",
+            CardType::Gallagher => "Gallagher",
+            CardType::PAC => "PAC/Stanley",
+            CardType::Noralsy => "Noralsy",
+            CardType::Jablotron => "Jablotron",
+            CardType::SecuraKey => "SecuraKey",
+            CardType::Visa2000 => "Visa2000",
+            CardType::Motorola => "Motorola",
+            CardType::IDTECK => "IDTECK",
+            CardType::COTAG => "COTAG",
+            CardType::EM4x50 => "EM4x50",
+            CardType::Hitag => "Hitag",
             CardType::MifareClassic1K => "MIFARE Classic 1K",
             CardType::MifareClassic4K => "MIFARE Classic 4K",
             CardType::MifareUltralight => "MIFARE Ultralight",
@@ -81,23 +124,52 @@ impl CardType {
     pub fn is_cloneable(&self) -> bool {
         match self {
             CardType::DESFire => false,
+            CardType::COTAG => false,
+            CardType::EM4x50 => false,
+            CardType::Hitag => false,
             _ => true,
+        }
+    }
+
+    /// Reason why a card type cannot be cloned, if applicable.
+    pub fn non_cloneable_reason(&self) -> Option<&str> {
+        match self {
+            CardType::DESFire => Some("DESFire uses AES encryption; cloning not supported"),
+            CardType::COTAG => Some("Read-only, no clone commands available"),
+            CardType::EM4x50 => Some("Requires native EM4x50 blank, not T5577-compatible"),
+            CardType::Hitag => Some("Requires native Hitag chip, not T5577-compatible"),
+            _ => None,
         }
     }
 
     pub fn recommended_blank(&self) -> BlankType {
         match self {
-            CardType::EM4100 => BlankType::T5577,
-            CardType::HIDProx => BlankType::T5577,
-            CardType::Indala => BlankType::T5577,
-            CardType::IOProx => BlankType::T5577,
-            CardType::AWID => BlankType::T5577,
-            CardType::FDX_B => BlankType::T5577,
-            CardType::Paradox => BlankType::T5577,
-            CardType::Viking => BlankType::T5577,
-            CardType::Pyramid => BlankType::T5577,
-            CardType::Keri => BlankType::T5577,
-            CardType::NexWatch => BlankType::T5577,
+            // All LF cloneable types use T5577 by default
+            CardType::EM4100
+            | CardType::HIDProx
+            | CardType::Indala
+            | CardType::IOProx
+            | CardType::AWID
+            | CardType::FDX_B
+            | CardType::Paradox
+            | CardType::Viking
+            | CardType::Pyramid
+            | CardType::Keri
+            | CardType::NexWatch
+            | CardType::Presco
+            | CardType::Nedap
+            | CardType::GProxII
+            | CardType::Gallagher
+            | CardType::PAC
+            | CardType::Noralsy
+            | CardType::Jablotron
+            | CardType::SecuraKey
+            | CardType::Visa2000
+            | CardType::Motorola
+            | CardType::IDTECK => BlankType::T5577,
+            // Non-cloneable LF: return T5577 as placeholder (won't actually be used)
+            CardType::COTAG | CardType::EM4x50 | CardType::Hitag => BlankType::T5577,
+            // HF types
             CardType::MifareClassic1K | CardType::MifareClassic4K => BlankType::MagicMifareGen1a,
             CardType::MifareUltralight => BlankType::MagicUltralight,
             CardType::NTAG => BlankType::MagicUltralight,
@@ -134,6 +206,16 @@ impl BlankType {
             BlankType::IClassBlank => "iCLASS Blank",
         }
     }
+}
+
+/// T5577 chip detection result from `lf t55xx detect`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct T5577Status {
+    pub detected: bool,
+    pub chip_type: String,
+    pub password_set: bool,
+    pub block0: Option<String>,
+    pub modulation: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
