@@ -79,6 +79,92 @@ export const CARD_DISPLAY: Record<CardType, CardDisplayInfo> = {
     blankType: 'T5577',
     description: '125 kHz Honeywell NexWatch format card',
   },
+  Presco: {
+    displayName: 'Presco Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Presco format access card',
+  },
+  Nedap: {
+    displayName: 'Nedap Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Nedap biphase format',
+  },
+  GProxII: {
+    displayName: 'GuardAll / GProx II',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Guardall GProx II format',
+  },
+  Gallagher: {
+    displayName: 'Gallagher Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Gallagher format with region/issue level',
+  },
+  PAC: {
+    displayName: 'PAC/Stanley Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz PAC/Stanley format',
+  },
+  Noralsy: {
+    displayName: 'Noralsy Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Noralsy format',
+  },
+  Jablotron: {
+    displayName: 'Jablotron Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Jablotron format',
+  },
+  SecuraKey: {
+    displayName: 'SecuraKey Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz SecuraKey format',
+  },
+  Visa2000: {
+    displayName: 'Visa2000 Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Visa2000 format',
+  },
+  Motorola: {
+    displayName: 'Motorola Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz Motorola format',
+  },
+  IDTECK: {
+    displayName: 'IDTECK Access Card',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '125 kHz IDTECK PSK format',
+  },
+
+  // -- LF non-cloneable (display only) --
+  COTAG: {
+    displayName: 'COTAG Proximity',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: '134 kHz COTAG read-only protocol',
+  },
+  EM4x50: {
+    displayName: 'EM4x50 Tag',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: 'EM4x50 chip, requires native blank',
+  },
+  Hitag: {
+    displayName: 'Hitag Tag',
+    frequency: 'LF',
+    blankType: 'T5577',
+    description: 'Hitag 1/2/S/u, requires native Hitag chip',
+  },
 
   // -- HF cards (13.56 MHz) --
   MifareClassic1K: {
@@ -132,7 +218,12 @@ export const BLANK_DISPLAY: Record<BlankType, BlankDisplayInfo> = {
     displayName: 'T5577 Blank',
     frequency: 'LF',
     description: 'Writable 125 kHz transponder, emulates most LF card formats',
-    compatibleWith: ['EM4100', 'HIDProx', 'Indala', 'IOProx', 'AWID', 'FDX_B', 'Paradox', 'Viking', 'Pyramid', 'Keri', 'NexWatch'],
+    compatibleWith: [
+      'EM4100', 'HIDProx', 'Indala', 'IOProx', 'AWID', 'FDX_B',
+      'Paradox', 'Viking', 'Pyramid', 'Keri', 'NexWatch',
+      'Presco', 'Nedap', 'GProxII', 'Gallagher', 'PAC',
+      'Noralsy', 'Jablotron', 'SecuraKey', 'Visa2000', 'Motorola', 'IDTECK',
+    ],
   },
   EM4305: {
     displayName: 'EM4305 Blank',
@@ -182,6 +273,33 @@ export const BLANK_DISPLAY: Record<BlankType, BlankDisplayInfo> = {
     description: 'Writable iCLASS compatible credential',
     compatibleWith: ['IClass'],
   },
+};
+
+// Fields that each card type's decoded map may contain.
+// Used to render decoded data in the card detail view.
+export const CARD_DECODED_FIELDS: Partial<Record<CardType, string[]>> = {
+  EM4100: ['id'],
+  HIDProx: ['facility_code', 'card_number', 'raw', 'wiegand_format'],
+  Indala: ['id', 'raw'],
+  AWID: ['facility_code', 'card_number', 'format'],
+  IOProx: ['version_number', 'facility_code', 'card_number'],
+  FDX_B: ['country', 'national_id', 'animal'],
+  Paradox: ['facility_code', 'card_number', 'raw'],
+  Pyramid: ['facility_code', 'card_number', 'raw'],
+  Keri: ['id', 'type'],
+  NexWatch: ['raw'],
+  Viking: ['card_number'],
+  Presco: ['hex_data', 'sitecode', 'usercode'],
+  Nedap: ['subtype', 'card_number'],
+  GProxII: ['xsf', 'card_number'],
+  Gallagher: ['region_code', 'facility_code', 'card_number', 'issue_level'],
+  PAC: ['card_number', 'raw'],
+  Noralsy: ['card_number', 'year', 'raw'],
+  Jablotron: ['card_number'],
+  SecuraKey: ['raw'],
+  Visa2000: ['card_number'],
+  Motorola: ['raw'],
+  IDTECK: ['raw'],
 };
 
 /**

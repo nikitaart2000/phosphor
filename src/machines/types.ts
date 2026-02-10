@@ -3,6 +3,7 @@
 export type Frequency = 'LF' | 'HF';
 
 export type CardType =
+  // LF cloneable (original 11)
   | 'EM4100'
   | 'HIDProx'
   | 'Indala'
@@ -14,6 +15,23 @@ export type CardType =
   | 'Pyramid'
   | 'Keri'
   | 'NexWatch'
+  // LF cloneable (new 11)
+  | 'Presco'
+  | 'Nedap'
+  | 'GProxII'
+  | 'Gallagher'
+  | 'PAC'
+  | 'Noralsy'
+  | 'Jablotron'
+  | 'SecuraKey'
+  | 'Visa2000'
+  | 'Motorola'
+  | 'IDTECK'
+  // LF non-cloneable (display only)
+  | 'COTAG'
+  | 'EM4x50'
+  | 'Hitag'
+  // HF cards
   | 'MifareClassic1K'
   | 'MifareClassic4K'
   | 'MifareUltralight'
@@ -122,3 +140,12 @@ export type WizardStepName = WizardState['step'];
 
 // Helper: extract data type for a given step
 export type StepData<S extends WizardStepName> = Extract<WizardState, { step: S }> extends { data: infer D } ? D : never;
+
+// T5577 chip status for password detection and safety workflow
+export interface T5577Status {
+  detected: boolean;
+  chip_type: string;
+  password_set: boolean;
+  block0: string | null;
+  modulation: string | null;
+}

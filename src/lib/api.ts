@@ -28,27 +28,50 @@ export async function scanCard(): Promise<WizardState> {
 }
 
 /**
- * Confirm blank card placement and proceed to scanning it.
- * Called after user places blank on the reader.
+ * Confirm blank card placement via wizard_action ProceedToWrite.
+ * The backend doesn't have a standalone confirm_blank command;
+ * this is handled by the wizard FSM action.
  */
 export async function confirmBlank(): Promise<WizardState> {
-  return invoke<WizardState>('confirm_blank');
+  return invoke<WizardState>('wizard_action', {
+    action: { action: 'ProceedToWrite' },
+  });
 }
 
 /**
- * Execute the clone write operation.
+ * Execute the clone write operation with full card context.
  * Writes source card data to the blank card.
  */
-export async function writeClone(): Promise<WizardState> {
-  return invoke<WizardState>('write_clone');
+export async function writeCloneWithData(
+  port: string,
+  cardType: string,
+  uid: string,
+  decoded: Record<string, string>,
+  blankType?: string,
+): Promise<WizardState> {
+  return invoke<WizardState>('write_clone_with_data', {
+    port,
+    card_type: cardType,
+    uid,
+    decoded,
+    blank_type: blankType,
+  });
 }
 
 /**
  * Verify the written clone against source data.
  * Reads back the blank and compares block-by-block.
  */
-export async function verifyClone(): Promise<WizardState> {
-  return invoke<WizardState>('verify_clone');
+export async function verifyCloneWithData(
+  port: string,
+  sourceUid: string,
+  sourceCardType: string,
+): Promise<WizardState> {
+  return invoke<WizardState>('verify_clone', {
+    port,
+    source_uid: sourceUid,
+    source_card_type: sourceCardType,
+  });
 }
 
 /**
@@ -60,9 +83,11 @@ export async function getHistory(): Promise<CloneRecord[]> {
 }
 
 /**
- * Reset the wizard to idle state.
+ * Reset the wizard to idle state via wizard_action Reset.
  * Clears all in-progress operation data on the backend.
  */
 export async function resetWizard(): Promise<WizardState> {
-  return invoke<WizardState>('reset_wizard');
+  return invoke<WizardState>('wizard_action', {
+    action: { action: 'Reset' },
+  });
 }

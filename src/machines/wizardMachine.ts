@@ -163,11 +163,21 @@ export const wizardMachine = setup({
     confirmBlank: fromPromise<WizardState>(async () => {
       return api.confirmBlank();
     }),
-    writeClone: fromPromise<WizardState>(async () => {
-      return api.writeClone();
+    writeClone: fromPromise<WizardState, WizardContext>(async ({ input }) => {
+      return api.writeCloneWithData(
+        input.port!,
+        input.cardType!,
+        input.cardData!.uid,
+        input.cardData!.decoded,
+        input.blankType ?? undefined,
+      );
     }),
-    verifyClone: fromPromise<WizardState>(async () => {
-      return api.verifyClone();
+    verifyClone: fromPromise<WizardState, WizardContext>(async ({ input }) => {
+      return api.verifyCloneWithData(
+        input.port!,
+        input.cardData!.uid,
+        input.cardType!,
+      );
     }),
     resetBackend: fromPromise<WizardState>(async () => {
       return api.resetWizard();
@@ -373,6 +383,7 @@ export const wizardMachine = setup({
     writing: {
       invoke: {
         src: 'writeClone',
+        input: ({ context }: { context: WizardContext }) => context,
         onDone: [
           {
             guard: ({ event }) => {
@@ -431,6 +442,7 @@ export const wizardMachine = setup({
     verifying: {
       invoke: {
         src: 'verifyClone',
+        input: ({ context }: { context: WizardContext }) => context,
         onDone: [
           {
             guard: ({ event }) => event.output.step === 'VerificationComplete',
