@@ -85,6 +85,7 @@ function toHistoryRecord(r: CloneRecord, index: number): HistoryRecord {
 export function HistoryView() {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,8 +96,11 @@ export function HistoryView() {
           setRecords(data.map(toHistoryRecord));
         }
       })
-      .catch(() => {
-        // API unavailable — show empty state
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Failed to load history';
+          setError(msg);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -115,6 +119,22 @@ export function HistoryView() {
           padding: '12px 0',
         }}>
           [..] Loading history...
+        </div>
+      </TerminalPanel>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <TerminalPanel title="CLONE HISTORY">
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          color: 'var(--red-bright)',
+          padding: '12px 0',
+        }}>
+          [XX] Error loading history: {error}
         </div>
       </TerminalPanel>
     );

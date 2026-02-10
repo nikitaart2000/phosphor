@@ -70,7 +70,13 @@ export function StatusBar({ status, message, musicEnabled, onMusicToggle }: Stat
         zIndex: 10,
       }}
     >
-      <div style={{ color: display.color }}>
+      <div style={{
+        color: display.color,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        maxWidth: '50%',
+      }}>
         {display.prefix} {display.text}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
