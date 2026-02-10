@@ -1,12 +1,23 @@
-import "./styles/globals.css";
+import { useState } from 'react';
+import './styles/globals.css';
+import { BootSequence } from './components/matrix/BootSequence';
+import { MainLayout } from './components/layout/MainLayout';
+import { MatrixRain } from './components/matrix/MatrixRain';
+import { CrtOverlay } from './components/matrix/CrtOverlay';
 
 function App() {
+  const [booted, setBooted] = useState(false);
+
   return (
-    <div className="w-full h-full flex items-center justify-center">
-      <p className="text-[var(--text-primary)] font-mono text-lg">
-        PHOSPHOR v0.1.0
-      </p>
-    </div>
+    <>
+      <MatrixRain rainState={booted ? 'idle' : 'scanning'} />
+      {booted ? (
+        <MainLayout />
+      ) : (
+        <BootSequence onComplete={() => setBooted(true)} />
+      )}
+      <CrtOverlay />
+    </>
   );
 }
 
