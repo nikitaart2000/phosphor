@@ -82,7 +82,6 @@ export function WizardContainer() {
             totalBlocks={wizard.context.totalBlocks}
             cardType={wizard.context.cardType}
             isLoading={true}
-            onComplete={() => {}}
           />
         );
       case 'Verifying':
@@ -99,7 +98,7 @@ export function WizardContainer() {
             mismatchedBlocks={wizard.context.mismatchedBlocks}
             isLoading={false}
             onContinue={wizard.finish}
-            onRetryWrite={() => wizard.send({ type: 'WRITE' })}
+            onRetryWrite={wizard.reset}
             onReset={wizard.reset}
           />
         );

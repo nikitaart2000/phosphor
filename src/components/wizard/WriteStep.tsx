@@ -5,7 +5,6 @@ import { StepIndicator, type Step } from '../shared/StepIndicator';
 import type { CardType } from '../../machines/types';
 
 interface WriteStepProps {
-  onComplete: () => void;
   isLoading?: boolean;
   progress?: number;
   currentBlock?: number | null;
@@ -36,7 +35,6 @@ function getPhaseSteps(progress: number): Step[] {
 }
 
 export function WriteStep({
-  onComplete: _onComplete,
   isLoading,
   progress = 0,
   currentBlock,
