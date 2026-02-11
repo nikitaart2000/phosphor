@@ -103,6 +103,7 @@ export type WizardEvent =
   | { type: 'VERIFY_RESULT'; success: boolean; mismatchedBlocks: number[] }
   | { type: 'FINISH' }
   | { type: 'ERROR'; message: string; userMessage: string; recoverable: boolean; recoveryAction: RecoveryAction | null }
+  | { type: 'RETRY' }
   | { type: 'RESET' };
 
 // -- Machine definition --
@@ -487,12 +488,18 @@ export const wizardMachine = setup({
 
     complete: {
       on: {
+        DETECT: { target: 'detectingDevice', actions: assign(() => initialContext) },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },
 
     error: {
       on: {
+        RETRY: {
+          guard: ({ context }) => context.errorRecoverable,
+          target: 'idle',
+          actions: assign(() => initialContext),
+        },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },
