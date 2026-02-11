@@ -6,6 +6,14 @@ use crate::error::AppError;
 use crate::pm3::{command_builder, connection, output_parser};
 use crate::state::{WizardAction, WizardMachine, WizardState};
 
+/// Total progress steps for the T5577 write flow:
+/// detect -> check password -> wipe -> verify wipe -> clone -> done
+const T5577_TOTAL_STEPS: u16 = 6;
+
+/// Total progress steps for the EM4305 write flow:
+/// detect -> wipe -> verify wipe -> clone -> done
+const EM4305_TOTAL_STEPS: u16 = 5;
+
 /// Stub that returns an error directing callers to write_clone_with_data.
 /// Kept registered so the frontend gets a clear message if it calls without params.
 #[tauri::command]
@@ -156,7 +164,7 @@ async fn write_t5577_flow(
     machine: &State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Step 1: Detect T5577
-    update_progress(app, machine, 0.1, Some(0), Some(6))?;
+    update_progress(app, machine, 0.1, Some(0), Some(T5577_TOTAL_STEPS))?;
 
     let detect_out =
         connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
@@ -173,7 +181,7 @@ async fn write_t5577_flow(
     }
 
     // Step 2: Check for password protection
-    update_progress(app, machine, 0.2, Some(1), Some(6))?;
+    update_progress(app, machine, 0.2, Some(1), Some(T5577_TOTAL_STEPS))?;
 
     let password: Option<String> = if t5577_status.password_set {
         // Password detected -- run chk to find it
@@ -209,7 +217,7 @@ async fn write_t5577_flow(
     };
 
     // Step 3: Wipe (with password if needed)
-    update_progress(app, machine, 0.35, Some(2), Some(6))?;
+    update_progress(app, machine, 0.35, Some(2), Some(T5577_TOTAL_STEPS))?;
 
     let wipe_cmd = command_builder::build_wipe_command(&BlankType::T5577, password.as_deref())
         .ok_or_else(|| AppError::CommandFailed("No wipe command for this blank type".into()))?;
@@ -218,7 +226,7 @@ async fn write_t5577_flow(
     // Step 4: Verify wipe — ensure T5577 is detected and no longer password-protected.
     // PM3 can return exit code 0 even when a password-protected wipe fails silently.
     // Proceeding to clone without this check risks soft-bricking the card.
-    update_progress(app, machine, 0.5, Some(3), Some(6))?;
+    update_progress(app, machine, 0.5, Some(3), Some(T5577_TOTAL_STEPS))?;
 
     let verify_wipe_out =
         connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
@@ -240,7 +248,7 @@ async fn write_t5577_flow(
     let password: Option<String> = None;
 
     // Step 5: Clone
-    update_progress(app, machine, 0.7, Some(4), Some(6))?;
+    update_progress(app, machine, 0.7, Some(4), Some(T5577_TOTAL_STEPS))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
@@ -277,7 +285,7 @@ async fn write_t5577_flow(
     }
 
     // Step 6: Done writing -> Verifying transition
-    update_progress(app, machine, 1.0, Some(5), Some(6))?;
+    update_progress(app, machine, 1.0, Some(5), Some(T5577_TOTAL_STEPS))?;
     {
         let mut m = machine.lock().map_err(|e| {
             AppError::CommandFailed(format!("State lock poisoned: {}", e))
@@ -305,7 +313,7 @@ async fn write_em4305_flow(
 ) -> Result<WizardState, AppError> {
     // Step 1: Detect EM4305 — verify the blank chip is present before wiping.
     // Mirrors the T5577 detect step to prevent wiping air / wrong chip.
-    update_progress(app, machine, 0.1, Some(0), Some(5))?;
+    update_progress(app, machine, 0.1, Some(0), Some(EM4305_TOTAL_STEPS))?;
 
     let info_out =
         connection::run_command(app, port, command_builder::build_em4305_info()).await?;
@@ -321,14 +329,14 @@ async fn write_em4305_flow(
     }
 
     // Step 2: Wipe EM4305
-    update_progress(app, machine, 0.3, Some(1), Some(5))?;
+    update_progress(app, machine, 0.3, Some(1), Some(EM4305_TOTAL_STEPS))?;
 
     connection::run_command(app, port, command_builder::build_em4305_wipe()).await?;
 
     // Step 3: Verify wipe — read word 0 and check it's zeroed.
     // PM3 can return exit code 0 even when wipe fails silently.
     // Proceeding to clone without this check risks corrupted data on the card.
-    update_progress(app, machine, 0.5, Some(2), Some(5))?;
+    update_progress(app, machine, 0.5, Some(2), Some(EM4305_TOTAL_STEPS))?;
 
     let verify_out =
         connection::run_command(app, port, &command_builder::build_em4305_read_word(0)).await?;
@@ -351,7 +359,7 @@ async fn write_em4305_flow(
     // This is acceptable: the clone step will fail if the card is in a bad state.
 
     // Step 4: Clone with --em flag
-    update_progress(app, machine, 0.7, Some(3), Some(5))?;
+    update_progress(app, machine, 0.7, Some(3), Some(EM4305_TOTAL_STEPS))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
@@ -384,7 +392,7 @@ async fn write_em4305_flow(
     }
 
     // Step 5: Done -> Verifying
-    update_progress(app, machine, 1.0, Some(4), Some(5))?;
+    update_progress(app, machine, 1.0, Some(4), Some(EM4305_TOTAL_STEPS))?;
     {
         let mut m = machine.lock().map_err(|e| {
             AppError::CommandFailed(format!("State lock poisoned: {}", e))
@@ -412,6 +420,24 @@ pub async fn verify_clone(
     _blank_type: Option<BlankType>,
     machine: State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
+    // Guard: must be in Verifying state before running any hardware commands.
+    // Without this check, a call from the wrong state would waste a PM3
+    // command before failing on the FSM transition.
+    {
+        let m = machine.lock().map_err(|e| {
+            AppError::CommandFailed(format!("State lock poisoned: {}", e))
+        })?;
+        match &m.current {
+            WizardState::Verifying => {}
+            other => {
+                return Err(AppError::InvalidTransition(format!(
+                    "Must be in Verifying state to verify clone, currently in {:?}",
+                    std::mem::discriminant(other)
+                )));
+            }
+        }
+    }
+
     // Use type-specific reader command instead of generic lf search
     let verify_cmd = command_builder::build_verify_command(&source_card_type);
     let verify_output = connection::run_command(&app, &port, verify_cmd).await?;
@@ -431,10 +457,17 @@ pub async fn verify_clone(
         mismatched_blocks: mismatched.clone(),
     })?;
 
-    // Return VerificationComplete state to the frontend.
-    // The frontend handles FINISH -> MarkComplete via wizard_action.
-    // Previously this auto-advanced to Complete, causing the frontend
-    // XState guard (which checks for VerificationComplete) to fail.
+    // Note: VerificationComplete stores success/failure. The FINISH/MarkComplete
+    // transition is guarded in both state.rs (line 272: `success: true` pattern match)
+    // and wizardMachine.ts (guard: context.verifySuccess === true) to prevent
+    // completing with failed verification. No additional guard needed here.
+    if !success {
+        log::warn!(
+            "Verification failed: {} mismatched blocks",
+            mismatched.len()
+        );
+    }
+
     Ok(m.current.clone())
 }
 

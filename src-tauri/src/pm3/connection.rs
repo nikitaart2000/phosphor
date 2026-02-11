@@ -184,33 +184,63 @@ pub async fn detect_device(app: &AppHandle) -> Result<(String, String, String), 
 
 fn build_port_candidates() -> Vec<String> {
     let mut ports = Vec::new();
-    // Windows COM ports
-    for i in 1..=20 {
-        ports.push(format!("COM{}", i));
+
+    if cfg!(target_os = "windows") {
+        // Windows COM ports — extend to 40 to cover USB hub reassignment
+        for i in 1..=40 {
+            ports.push(format!("COM{}", i));
+        }
+    } else if cfg!(target_os = "macos") {
+        // macOS: /dev/tty.usbmodem* — cover common PM3 suffixes
+        for suffix in &[
+            "iceman1",
+            "14101",
+            "14201",
+            "14301",
+            "1",
+            "2",
+            "3",
+        ] {
+            ports.push(format!("/dev/tty.usbmodem{}", suffix));
+        }
+    } else {
+        // Linux: /dev/ttyACM* and /dev/ttyUSB*
+        for i in 0..=5 {
+            ports.push(format!("/dev/ttyACM{}", i));
+            ports.push(format!("/dev/ttyUSB{}", i));
+        }
     }
-    // Linux / macOS
-    for i in 0..=5 {
-        ports.push(format!("/dev/ttyACM{}", i));
-        ports.push(format!("/dev/ttyUSB{}", i));
-    }
-    ports.push("/dev/tty.usbmodemiceman1".to_string());
+
     ports
 }
 
 fn parse_hw_version(output: &str) -> Option<(String, String)> {
     let mut model = String::from("Proxmark3");
     let mut firmware = String::new();
+    let lower_output = output.to_lowercase();
 
     for line in output.lines() {
         let trimmed = line.trim();
-        if trimmed.contains("Prox") && trimmed.contains("RFID") {
-            // Lines like "[ Proxmark3 RFID instrument ]"
+        let lower = trimmed.to_lowercase();
+
+        // Model detection: original "Prox" + "RFID" pattern, plus broader "Proxmark" match
+        if (trimmed.contains("Prox") && trimmed.contains("RFID"))
+            || lower.contains("proxmark")
+        {
+            // Lines like "[ Proxmark3 RFID instrument ]" or "Proxmark3 RDV4"
             let cleaned = trimmed.trim_matches(|c: char| !c.is_alphanumeric() && c != ' ');
             if !cleaned.is_empty() {
                 model = cleaned.to_string();
             }
         }
-        if trimmed.starts_with("firmware") || trimmed.contains("FW Version") {
+
+        // Firmware detection: original patterns + broader resilience
+        if trimmed.starts_with("firmware")
+            || trimmed.contains("FW Version")
+            || trimmed.starts_with("bootrom:")
+            || lower.contains("compiled")
+            || lower.contains("version")
+        {
             firmware = trimmed.to_string();
         }
         // Iceman fork: "os: ..."
@@ -220,8 +250,8 @@ fn parse_hw_version(output: &str) -> Option<(String, String)> {
     }
 
     if firmware.is_empty() {
-        // Accept any output that mentions proxmark
-        if output.to_lowercase().contains("proxmark") {
+        // Accept any output that mentions proxmark — it's a valid device
+        if lower_output.contains("proxmark") {
             firmware = "unknown".to_string();
         } else {
             return None;

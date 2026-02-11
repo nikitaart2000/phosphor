@@ -124,6 +124,20 @@ static GALLAGHER_RE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("bad gallagher regex")
 });
 
+// Per-field Gallagher regexes — fallback for multi-line PM3 output
+static GALLAGHER_RC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Region\s+Code[:/\s]*(\d+)").expect("bad gallagher rc regex")
+});
+static GALLAGHER_FC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Facility\s+Code[:/\s]*(\d+)").expect("bad gallagher fc regex")
+});
+static GALLAGHER_CN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Card\s+Number[:/\s]*(\d+)").expect("bad gallagher cn regex")
+});
+static GALLAGHER_IL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Issue\s+Level[:/\s]*(\d+)").expect("bad gallagher il regex")
+});
+
 static PAC_DETECT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\[\+\].*\b(?:PAC|Stanley)\b").expect("bad pac detect regex")
 });
@@ -335,11 +349,34 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
 
     // Gallagher
     if clean.contains("Gallagher") {
+        // Fast path: single-line regex with all 4 fields
         if let Some(caps) = GALLAGHER_RE.captures(&clean) {
             let rc = caps[1].to_string();
             let fc = caps[2].to_string();
             let cn = caps[3].to_string();
             let il = caps[4].to_string();
+            let uid = format!("RC{}:FC{}:CN{}:IL{}", rc, fc, cn, il);
+            let mut decoded = HashMap::new();
+            decoded.insert("type".to_string(), "Gallagher".to_string());
+            decoded.insert("region_code".to_string(), rc);
+            decoded.insert("facility_code".to_string(), fc);
+            decoded.insert("card_number".to_string(), cn);
+            decoded.insert("issue_level".to_string(), il);
+            return Some((
+                CardType::Gallagher,
+                CardData {
+                    uid,
+                    raw: String::new(),
+                    decoded,
+                },
+            ));
+        }
+        // Fallback: per-field regexes for multi-line PM3 output (order-independent)
+        let rc = GALLAGHER_RC_RE.captures(&clean).map(|c| c[1].to_string());
+        let fc = GALLAGHER_FC_RE.captures(&clean).map(|c| c[1].to_string());
+        let cn = GALLAGHER_CN_RE.captures(&clean).map(|c| c[1].to_string());
+        let il = GALLAGHER_IL_RE.captures(&clean).map(|c| c[1].to_string());
+        if let (Some(rc), Some(fc), Some(cn), Some(il)) = (rc, fc, cn, il) {
             let uid = format!("RC{}:FC{}:CN{}:IL{}", rc, fc, cn, il);
             let mut decoded = HashMap::new();
             decoded.insert("type".to_string(), "Gallagher".to_string());
@@ -1289,7 +1326,7 @@ pub fn parse_em4305_word0(output: &str) -> Option<String> {
 
 fn extract_first_hex_block(s: &str) -> Option<String> {
     static HEX_BLOCK_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\b([0-9A-Fa-f]{8,})\b").expect("bad hex block regex"));
+        LazyLock::new(|| Regex::new(r"(?:\b0[xX])?([0-9A-Fa-f]{8,})\b").expect("bad hex block regex"));
 
     HEX_BLOCK_RE.captures(s).map(|c| c[1].to_uppercase())
 }

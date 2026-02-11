@@ -181,6 +181,10 @@ pub fn build_pyramid_clone(fc: u32, cn: u32) -> String {
     format!("lf pyramid clone --fc {} --cn {}", fc, cn)
 }
 
+pub fn build_pyramid_clone_raw(raw: &str) -> String {
+    format!("lf pyramid clone --raw {}", raw)
+}
+
 /// Keri clone with type support: "i" for internal, "m" for MS format.
 pub fn build_keri_clone(raw: &str, keri_type: Option<&str>) -> String {
     match keri_type {
@@ -372,6 +376,7 @@ pub fn build_clone_command(
                     return Some(build_awid_clone(fc_n, cn_n, fmt));
                 }
             }
+            // No raw fallback — awid clone requires --fc and --cn flags
             None
         }
 
@@ -416,7 +421,11 @@ pub fn build_clone_command(
                     return Some(build_pyramid_clone(fc_n, cn_n));
                 }
             }
-            None
+            // Raw fallback — parser stores raw hex in decoded["raw"]
+            decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+                .map(|raw| build_pyramid_clone_raw(raw))
         }
 
         CardType::Keri => {
@@ -452,6 +461,7 @@ pub fn build_clone_command(
                     return Some(build_nedap_clone(st_n, cn_n));
                 }
             }
+            // No raw fallback — nedap clone requires --st and --cn flags
             None
         }
 
@@ -463,6 +473,7 @@ pub fn build_clone_command(
                     return Some(build_gproxii_clone(xsf_n, cn_n));
                 }
             }
+            // No raw fallback — gproxii clone requires --xsf and --cn flags
             None
         }
 
@@ -482,6 +493,7 @@ pub fn build_clone_command(
                     return Some(build_gallagher_clone(rc_n, fc_n, cn_n, il_n));
                 }
             }
+            // No raw fallback — gallagher clone requires --rc, --fc, --cn, --il flags
             None
         }
 
@@ -537,6 +549,7 @@ pub fn build_clone_command(
                     return Some(build_visa2000_clone(cn_n));
                 }
             }
+            // No raw fallback — visa2000 clone requires numeric --cn flag
             None
         }
 
