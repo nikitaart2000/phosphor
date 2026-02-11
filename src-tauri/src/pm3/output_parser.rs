@@ -92,7 +92,7 @@ static PRESCO_SC_UC_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static NEDAP_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)Nedap.*?Sub(?:type)?[:/\s]*(\d+).*?Card[:/\s]*(\d+)")
+    Regex::new(r"(?i)Nedap.*?Card[:/\s]*(\d+).*?Sub(?:type)?[:/\s]*(\d+)")
         .expect("bad nedap regex")
 });
 
@@ -103,7 +103,7 @@ static GPROXII_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 static GALLAGHER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)Gallagher.*?RC[:/\s]*(\d+).*?FC[:/\s]*(\d+).*?CN[:/\s]*(\d+).*?IL[:/\s]*(\d+)",
+        r"(?i)Gallagher.*?Region\s+Code[:/\s]*(\d+).*?Facility\s+Code[:/\s]*(\d+).*?Card\s+Number[:/\s]*(\d+).*?Issue\s+Level[:/\s]*(\d+)",
     )
     .expect("bad gallagher regex")
 });
@@ -150,15 +150,15 @@ static IDTECK_RE: LazyLock<Regex> = LazyLock::new(|| {
 // ---------------------------------------------------------------------------
 
 static COTAG_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)COTAG").expect("bad cotag regex")
+    Regex::new(r"(?i)\[\+\].*COTAG").expect("bad cotag regex")
 });
 
 static EM4X50_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)EM4x50").expect("bad em4x50 regex")
+    Regex::new(r"(?i)\[\+\].*EM4x50").expect("bad em4x50 regex")
 });
 
 static HITAG_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)Hitag").expect("bad hitag regex")
+    Regex::new(r"(?i)\[\+\].*Hitag").expect("bad hitag regex")
 });
 
 // ---------------------------------------------------------------------------
@@ -323,8 +323,8 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
     // Nedap
     if clean.contains("Nedap") || clean.contains("NEDAP") {
         if let Some(caps) = NEDAP_RE.captures(&clean) {
-            let st = caps[1].to_string();
-            let cn = caps[2].to_string();
+            let cn = caps[1].to_string();
+            let st = caps[2].to_string();
             let uid = format!("ST{}:CN{}", st, cn);
             let mut decoded = HashMap::new();
             decoded.insert("type".to_string(), "Nedap".to_string());

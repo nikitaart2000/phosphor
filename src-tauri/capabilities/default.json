@@ -6,6 +6,26 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "shell:default"
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "proxmark3",
+          "cmd": "proxmark3",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "proxmark3",
+          "cmd": "proxmark3",
+          "args": true
+        }
+      ]
+    }
   ]
 }

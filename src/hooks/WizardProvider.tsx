@@ -111,20 +111,34 @@ export function WizardProvider({ children }: { children: ReactNode }) {
 
   const detect = useCallback(() => send({ type: 'DETECT' }), [send]);
   const scan = useCallback(() => send({ type: 'SCAN' }), [send]);
+  const write = useCallback(() => send({ type: 'WRITE' }), [send]);
+  const reset = useCallback(async () => {
+    try {
+      await api.resetWizard();
+    } catch (err) {
+      console.error('reset: Rust resetWizard failed, still resetting XState', err);
+    }
+    // Always send RESET to XState — reset is the recovery action
+    send({ type: 'RESET' });
+  }, [send]);
   const skipToBlank = useCallback(
     async (expectedBlank: BlankType) => {
       // Sync Rust FSM: CardIdentified → WaitingForBlank
-      try { await api.proceedToWrite(); } catch { /* best-effort */ }
-      send({ type: 'SKIP_TO_BLANK', expectedBlank });
+      try {
+        await api.proceedToWrite();
+        send({ type: 'SKIP_TO_BLANK', expectedBlank });
+      } catch (err) {
+        console.error('skipToBlank: Rust proceedToWrite failed, resetting both FSMs', err);
+        reset();
+      }
     },
-    [send],
+    [send, reset],
   );
-  const write = useCallback(() => send({ type: 'WRITE' }), [send]);
   const finish = useCallback(async () => {
     // Sync Rust FSM: VerificationComplete → Complete
     const ctx = state.context;
-    if (ctx.cardType && ctx.cardData) {
-      try {
+    try {
+      if (ctx.cardType && ctx.cardData) {
         await api.markComplete(
           {
             card_type: ctx.cardType,
@@ -137,30 +151,29 @@ export function WizardProvider({ children }: { children: ReactNode }) {
             display_name: ctx.blankType ?? 'T5577',
           },
         );
-      } catch { /* best-effort */ }
+      }
+      send({ type: 'FINISH' });
+      // Save clone record to history after successful verification
+      if (ctx.verifySuccess && ctx.cardType && ctx.cardData && ctx.port) {
+        try {
+          await api.saveCloneRecord({
+            id: null,
+            source_type: ctx.cardType,
+            source_uid: ctx.cardData.uid,
+            target_type: ctx.blankType ?? 'T5577',
+            target_uid: ctx.cardData.uid,
+            port: ctx.port,
+            success: true,
+            timestamp: new Date().toISOString(),
+            notes: null,
+          });
+        } catch { /* best-effort history save */ }
+      }
+    } catch (err) {
+      console.error('finish: Rust markComplete failed, resetting both FSMs', err);
+      reset();
     }
-    send({ type: 'FINISH' });
-    // Save clone record to history after successful verification
-    if (ctx.verifySuccess && ctx.cardType && ctx.cardData && ctx.port) {
-      try {
-        await api.saveCloneRecord({
-          id: null,
-          source_type: ctx.cardType,
-          source_uid: ctx.cardData.uid,
-          target_type: ctx.blankType ?? 'T5577',
-          target_uid: ctx.cardData.uid,
-          port: ctx.port,
-          success: true,
-          timestamp: new Date().toISOString(),
-          notes: null,
-        });
-      } catch { /* best-effort history save */ }
-    }
-  }, [send, state.context]);
-  const reset = useCallback(async () => {
-    try { await api.resetWizard(); } catch { /* best-effort backend reset */ }
-    send({ type: 'RESET' });
-  }, [send]);
+  }, [send, state.context, reset]);
 
   const wizardReturn = useMemo<UseWizardReturn>(
     () => ({

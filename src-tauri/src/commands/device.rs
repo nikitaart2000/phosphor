@@ -31,13 +31,23 @@ pub async fn detect_device(
             Ok(m.current.clone())
         }
         Err(e) => {
+            let err_msg = e.to_string();
+            let user_message = if err_msg.contains("spawn")
+                || err_msg.contains("not found")
+                || err_msg.contains("No such file")
+                || err_msg.contains("program not found")
+            {
+                "Proxmark3 binary not found. Ensure proxmark3 is installed and in your PATH."
+                    .to_string()
+            } else {
+                "No Proxmark3 device found. Check your USB connection.".to_string()
+            };
             let mut m = machine.lock().map_err(|e| {
                 AppError::CommandFailed(format!("State lock poisoned: {}", e))
             })?;
             m.transition(WizardAction::ReportError {
-                message: e.to_string(),
-                user_message: "No Proxmark3 device found. Check USB connection and drivers."
-                    .to_string(),
+                message: err_msg,
+                user_message,
                 recoverable: true,
                 recovery_action: Some(crate::cards::types::RecoveryAction::Retry),
             })?;

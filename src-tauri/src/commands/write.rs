@@ -115,7 +115,7 @@ pub async fn write_clone_with_data(
 }
 
 /// T5577 write flow with password safety:
-/// 1. detect -> 2. check password -> 3. wipe (with password if needed) -> 4. clone
+/// 1. detect -> 2. check password -> 3. wipe (with password if needed) -> 4. verify wipe -> 5. clone
 async fn write_t5577_flow(
     app: &AppHandle,
     port: &str,
@@ -125,7 +125,7 @@ async fn write_t5577_flow(
     machine: &State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Step 1: Detect T5577
-    update_progress(app, machine, 0.1, Some(0), Some(5))?;
+    update_progress(app, machine, 0.1, Some(0), Some(6))?;
 
     let detect_out =
         connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
@@ -142,7 +142,7 @@ async fn write_t5577_flow(
     }
 
     // Step 2: Check for password protection
-    update_progress(app, machine, 0.2, Some(1), Some(5))?;
+    update_progress(app, machine, 0.2, Some(1), Some(6))?;
 
     let password: Option<String> = if t5577_status.password_set {
         // Password detected -- run chk to find it
@@ -178,13 +178,33 @@ async fn write_t5577_flow(
     };
 
     // Step 3: Wipe (with password if needed)
-    update_progress(app, machine, 0.4, Some(2), Some(5))?;
+    update_progress(app, machine, 0.35, Some(2), Some(6))?;
 
     let wipe_cmd = command_builder::build_wipe_command(&BlankType::T5577, password.as_deref());
     connection::run_command(app, port, &wipe_cmd).await?;
 
-    // Step 4: Clone (with password if needed)
-    update_progress(app, machine, 0.6, Some(3), Some(5))?;
+    // Step 4: Verify wipe — ensure T5577 is detected and no longer password-protected.
+    // PM3 can return exit code 0 even when a password-protected wipe fails silently.
+    // Proceeding to clone without this check risks soft-bricking the card.
+    update_progress(app, machine, 0.5, Some(3), Some(6))?;
+
+    let verify_wipe_out =
+        connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
+    let verify_status = output_parser::parse_t5577_detect(&verify_wipe_out);
+
+    if !verify_status.detected || verify_status.password_set {
+        return report_error(
+            machine,
+            "T5577 wipe verification failed — card may still be password-protected. Do not proceed with cloning.",
+            "Wipe verification failed. The card may still be password-protected. \
+             Do not remove the card — try again or use a different blank.",
+            true,
+            Some(RecoveryAction::Retry),
+        );
+    }
+
+    // Step 5: Clone (with password if needed)
+    update_progress(app, machine, 0.7, Some(4), Some(6))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
@@ -206,8 +226,8 @@ async fn write_t5577_flow(
         }
     }
 
-    // Step 5: Done writing -> Verifying transition
-    update_progress(app, machine, 1.0, Some(4), Some(5))?;
+    // Step 6: Done writing -> Verifying transition
+    update_progress(app, machine, 1.0, Some(5), Some(6))?;
     {
         let mut m = machine.lock().map_err(|e| {
             AppError::CommandFailed(format!("State lock poisoned: {}", e))

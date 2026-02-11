@@ -45,6 +45,21 @@ pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<Strin
         )));
     }
 
+    // Reject command strings containing PM3 command separators or newlines.
+    // The PM3 CLI's `-c` flag treats `;` as a delimiter, so a crafted value
+    // like "AA;lf t55xx wipe" would execute two commands. Block this at the
+    // chokepoint so no caller can accidentally pass through unsanitised input.
+    if cmd.contains(';') || cmd.contains('\n') || cmd.contains('\r') {
+        return Err(AppError::CommandFailed(
+            "Invalid characters in command".into(),
+        ));
+    }
+    if port.contains(';') || port.contains('\n') || port.contains('\r') {
+        return Err(AppError::CommandFailed(
+            "Invalid characters in command".into(),
+        ));
+    }
+
     let output_future = app
         .shell()
         .command("proxmark3")
@@ -93,16 +108,29 @@ pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<Strin
 /// Returns (port, model, firmware) on success.
 pub async fn detect_device(app: &AppHandle) -> Result<(String, String, String), AppError> {
     let candidates = build_port_candidates();
+    let mut first_error: Option<AppError> = None;
 
     for port in &candidates {
-        if let Ok(output) = run_command(app, port, "hw version").await {
-            if let Some((model, firmware)) = parse_hw_version(&output) {
-                return Ok((port.clone(), model, firmware));
+        match run_command(app, port, "hw version").await {
+            Ok(output) => {
+                if let Some((model, firmware)) = parse_hw_version(&output) {
+                    return Ok((port.clone(), model, firmware));
+                }
+            }
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
             }
         }
     }
 
-    Err(AppError::DeviceNotFound)
+    // Propagate the first error so callers can distinguish "binary not found"
+    // from "device not connected" by inspecting the error message.
+    match first_error {
+        Some(e) => Err(e),
+        None => Err(AppError::DeviceNotFound),
+    }
 }
 
 fn build_port_candidates() -> Vec<String> {
