@@ -60,6 +60,15 @@ static FDXB_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("bad fdxb regex")
 });
 
+static PYRAMID_FC_CN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Pyramid.*?FC[:/\s]*(\d+).*?Card[:/\s]*(\d+)")
+        .expect("bad pyramid fc/cn regex")
+});
+
+static PYRAMID_RAW_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Pyramid.*?Raw[:/\s]*([0-9A-Fa-f]+)").expect("bad pyramid raw regex")
+});
+
 static PARADOX_FC_CN_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)Paradox.*?FC[:/\s]*(\d+).*?(?:Card|CN)[:/\s]*(\d+)")
         .expect("bad paradox fc/cn regex")
@@ -270,6 +279,11 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
     // Keri — improved with type detection
     if clean.contains("Keri") {
         return parse_keri(&clean);
+    }
+
+    // Pyramid — dedicated parser for FC/CN extraction
+    if clean.contains("Pyramid") {
+        return parse_pyramid(&clean);
     }
 
     // --- New card types (check before generic fallback) ---
@@ -492,7 +506,6 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
         let tag_name = caps[1].to_string();
         let card_type = match tag_name.to_lowercase().as_str() {
             "viking" => CardType::Viking,
-            "pyramid" => CardType::Pyramid,
             "nexwatch" => CardType::NexWatch,
             _ => return None,
         };
@@ -747,6 +760,61 @@ fn parse_keri(clean: &str) -> Option<(CardType, CardData)> {
     if !raw.is_empty() {
         return Some((
             CardType::Keri,
+            CardData {
+                uid: raw.clone(),
+                raw,
+                decoded,
+            },
+        ));
+    }
+
+    None
+}
+
+fn parse_pyramid(clean: &str) -> Option<(CardType, CardData)> {
+    let mut decoded = HashMap::new();
+    decoded.insert("type".to_string(), "Pyramid".to_string());
+
+    // Try FC/Card first (e.g. "[+] Pyramid - len: 26, FC: 123, Card: 456, Raw: AABBCCDD")
+    if let Some(caps) = PYRAMID_FC_CN_RE.captures(clean) {
+        let fc = caps[1].to_string();
+        let cn = caps[2].to_string();
+        decoded.insert("facility_code".to_string(), fc.clone());
+        decoded.insert("card_number".to_string(), cn.clone());
+        let uid = format!("FC{}:CN{}", fc, cn);
+        // Also grab raw if available
+        if let Some(raw_caps) = PYRAMID_RAW_RE.captures(clean) {
+            decoded.insert("raw".to_string(), raw_caps[1].to_uppercase());
+        }
+        return Some((
+            CardType::Pyramid,
+            CardData {
+                uid,
+                raw: decoded.get("raw").cloned().unwrap_or_default(),
+                decoded,
+            },
+        ));
+    }
+
+    // Fallback to raw hex
+    if let Some(caps) = PYRAMID_RAW_RE.captures(clean) {
+        let raw = caps[1].to_uppercase();
+        decoded.insert("raw".to_string(), raw.clone());
+        return Some((
+            CardType::Pyramid,
+            CardData {
+                uid: raw.clone(),
+                raw,
+                decoded,
+            },
+        ));
+    }
+
+    // Last resort: any hex block
+    let raw = extract_first_hex_block(clean).unwrap_or_default();
+    if !raw.is_empty() {
+        return Some((
+            CardType::Pyramid,
             CardData {
                 uid: raw.clone(),
                 raw,

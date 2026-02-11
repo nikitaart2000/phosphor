@@ -50,6 +50,17 @@ pub async fn write_clone_with_data(
 
     let blank = blank_type.unwrap_or_else(|| card_type.recommended_blank());
 
+    // Guard: reject EM4305 blank for card types that don't support the --em flag.
+    // Only the original 11 LF types support EM4305. The newer types (Presco, Nedap,
+    // GProxII, Gallagher, PAC, Noralsy, Jablotron, SecuraKey, Visa2000, Motorola,
+    // IDTECK) will fail silently or error when --em is passed.
+    if blank == BlankType::EM4305 && !card_type.supports_em4305() {
+        return Err(AppError::CommandFailed(format!(
+            "{} does not support EM4305 blanks. Please use a T5577 blank instead.",
+            card_type.display_name()
+        )));
+    }
+
     // Transition: BlankDetected -> Writing
     {
         let mut m = machine.lock().map_err(|e| {

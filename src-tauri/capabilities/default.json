@@ -14,6 +14,36 @@
           "name": "proxmark3",
           "cmd": "proxmark3",
           "args": true
+        },
+        {
+          "name": "proxmark3-win-c",
+          "cmd": "C:\\proxmark3\\proxmark3.exe",
+          "args": true
+        },
+        {
+          "name": "proxmark3-win-progfiles",
+          "cmd": "C:\\Program Files\\proxmark3\\proxmark3.exe",
+          "args": true
+        },
+        {
+          "name": "proxmark3-mac-local",
+          "cmd": "/usr/local/bin/proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-mac-brew",
+          "cmd": "/opt/homebrew/bin/proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-linux-local",
+          "cmd": "/usr/local/bin/proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-linux-usr",
+          "cmd": "/usr/bin/proxmark3",
+          "args": true
         }
       ]
     },
@@ -23,6 +53,36 @@
         {
           "name": "proxmark3",
           "cmd": "proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-win-c",
+          "cmd": "C:\\proxmark3\\proxmark3.exe",
+          "args": true
+        },
+        {
+          "name": "proxmark3-win-progfiles",
+          "cmd": "C:\\Program Files\\proxmark3\\proxmark3.exe",
+          "args": true
+        },
+        {
+          "name": "proxmark3-mac-local",
+          "cmd": "/usr/local/bin/proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-mac-brew",
+          "cmd": "/opt/homebrew/bin/proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-linux-local",
+          "cmd": "/usr/local/bin/proxmark3",
+          "args": true
+        },
+        {
+          "name": "proxmark3-linux-usr",
+          "cmd": "/usr/bin/proxmark3",
           "args": true
         }
       ]

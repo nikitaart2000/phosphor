@@ -12,6 +12,29 @@ use crate::pm3::output_parser::strip_ansi;
 /// Maximum time to wait for a PM3 subprocess to complete (30 seconds).
 const PM3_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Returns the ordered list of Tauri shell scope names to try when spawning the
+/// PM3 binary. The first entry (`"proxmark3"`) resolves via PATH; subsequent
+/// entries are platform-specific absolute paths registered in the shell scope.
+/// This lets users who installed PM3 outside of PATH (common on Windows) still
+/// use the app without manually editing their system PATH.
+fn pm3_scope_names() -> Vec<&'static str> {
+    let mut names = vec!["proxmark3"];
+
+    if cfg!(target_os = "windows") {
+        names.push("proxmark3-win-c");
+        names.push("proxmark3-win-progfiles");
+    } else if cfg!(target_os = "macos") {
+        names.push("proxmark3-mac-local");
+        names.push("proxmark3-mac-brew");
+    } else {
+        // Linux and other unix-like
+        names.push("proxmark3-linux-local");
+        names.push("proxmark3-linux-usr");
+    }
+
+    names
+}
+
 /// Validates that a port string matches expected serial port patterns.
 /// Accepts COM1-COM99 (Windows), /dev/ttyACM0-99, /dev/ttyUSB0-99 (Linux),
 /// and /dev/tty.usbmodem* (macOS).
@@ -60,48 +83,74 @@ pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<Strin
         ));
     }
 
-    let output_future = app
-        .shell()
-        .command("proxmark3")
-        .args(["-p", port, "-f", "-c", cmd])
-        .output();
+    // Try PATH-based lookup first, then fall back to common install locations.
+    // Each scope name maps to a binary path registered in capabilities/default.json.
+    let scope_names = pm3_scope_names();
+    let mut first_spawn_error: Option<AppError> = None;
 
-    // Note: When the timeout fires and the future is dropped, Tauri's shell plugin
-    // handles cleanup of the child process. The `tokio::time::timeout` wrapper
-    // ensures we don't wait forever, and the Tauri runtime drops the child on cancel.
-    let output = timeout(PM3_COMMAND_TIMEOUT, output_future)
-        .await
-        .map_err(|_| {
-            AppError::Timeout(format!(
-                "PM3 command timed out after {}s: {}",
-                PM3_COMMAND_TIMEOUT.as_secs(),
+    for scope_name in &scope_names {
+        let output_future = app
+            .shell()
+            .command(scope_name)
+            .args(["-p", port, "-f", "-c", cmd])
+            .output();
+
+        // Note: When the timeout fires and the future is dropped, Tauri's shell plugin
+        // handles cleanup of the child process. The `tokio::time::timeout` wrapper
+        // ensures we don't wait forever, and the Tauri runtime drops the child on cancel.
+        let output = match timeout(PM3_COMMAND_TIMEOUT, output_future).await {
+            Err(_) => {
+                return Err(AppError::Timeout(format!(
+                    "PM3 command timed out after {}s: {}",
+                    PM3_COMMAND_TIMEOUT.as_secs(),
+                    cmd
+                )));
+            }
+            Ok(Err(e)) => {
+                // Spawn failed — binary not found at this path. Record the error
+                // from the first attempt (PATH lookup) and try the next location.
+                if first_spawn_error.is_none() {
+                    first_spawn_error = Some(AppError::CommandFailed(format!(
+                        "Failed to spawn proxmark3: {}",
+                        e
+                    )));
+                }
+                continue;
+            }
+            Ok(Ok(output)) => output,
+        };
+
+        // Binary was found and executed — process the result immediately.
+        // No further fallback attempts needed regardless of exit code.
+        let code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        return match code {
+            0 => Ok(strip_ansi(&stdout)),
+            -5 | 251 => Err(AppError::Timeout(format!(
+                "PM3 timed out running: {}",
                 cmd
-            ))
-        })?
-        .map_err(|e| AppError::CommandFailed(format!("Failed to spawn proxmark3: {}", e)))?;
-
-    let code = output.status.code().unwrap_or(-1);
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    match code {
-        0 => Ok(strip_ansi(&stdout)),
-        -5 | 251 => Err(AppError::Timeout(format!(
-            "PM3 timed out running: {}",
-            cmd
-        ))),
-        _ => {
-            let detail = if stderr.is_empty() {
-                strip_ansi(&stdout)
-            } else {
-                strip_ansi(&stderr)
-            };
-            Err(AppError::CommandFailed(format!(
-                "Exit code {}: {}",
-                code, detail
-            )))
-        }
+            ))),
+            _ => {
+                let detail = if stderr.is_empty() {
+                    strip_ansi(&stdout)
+                } else {
+                    strip_ansi(&stderr)
+                };
+                Err(AppError::CommandFailed(format!(
+                    "Exit code {}: {}",
+                    code, detail
+                )))
+            }
+        };
     }
+
+    // All scope names exhausted — return the first spawn error (from PATH lookup)
+    // so the error message is the most user-recognizable one.
+    Err(first_spawn_error.unwrap_or_else(|| {
+        AppError::CommandFailed("Failed to spawn proxmark3: binary not found".into())
+    }))
 }
 
 /// Scan common COM/serial ports trying `hw version` to find a connected PM3.

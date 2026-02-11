@@ -145,6 +145,28 @@ impl CardType {
         }
     }
 
+    /// Whether this card type supports cloning to EM4305 blanks (via `--em` flag).
+    /// Only the original 11 LF types support this flag in Proxmark3 Iceman firmware.
+    /// The 11 newer types (Presco, Nedap, GProxII, Gallagher, PAC, Noralsy,
+    /// Jablotron, SecuraKey, Visa2000, Motorola, IDTECK) do not support `--em`
+    /// and will fail silently or error if the flag is passed.
+    pub fn supports_em4305(&self) -> bool {
+        matches!(
+            self,
+            CardType::EM4100
+                | CardType::HIDProx
+                | CardType::Indala
+                | CardType::IOProx
+                | CardType::AWID
+                | CardType::FDX_B
+                | CardType::Paradox
+                | CardType::Viking
+                | CardType::Pyramid
+                | CardType::Keri
+                | CardType::NexWatch
+        )
+    }
+
     pub fn recommended_blank(&self) -> BlankType {
         match self {
             // All LF cloneable types use T5577 by default
