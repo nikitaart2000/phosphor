@@ -2,6 +2,55 @@
 /// All commands assume the Iceman fork with `-f` flag for subprocess piping.
 
 use crate::cards::types::{BlankType, CardType};
+use regex::Regex;
+use std::sync::LazyLock;
+
+/// Validates that a string contains only hex characters.
+static HEX_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9A-Fa-f]+$").unwrap());
+/// Validates that a string contains only hex characters and optional colons.
+static HEX_COLON_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9A-Fa-f:]+$").unwrap());
+/// Validates a T5577 password: exactly 8 hex characters.
+static PASSWORD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9A-Fa-f]{8}$").unwrap());
+
+fn validate_password(password: &str) -> Result<(), String> {
+    if !PASSWORD_RE.is_match(password) {
+        return Err(format!(
+            "Invalid password: must be exactly 8 hex characters, got '{}'",
+            password
+        ));
+    }
+    Ok(())
+}
+
+fn validate_hex(value: &str, field_name: &str) -> Result<(), String> {
+    if value.is_empty() || !HEX_RE.is_match(value) {
+        return Err(format!(
+            "Invalid {}: must be non-empty hex string, got '{}'",
+            field_name, value
+        ));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn validate_hex_or_colon(value: &str, field_name: &str) -> Result<(), String> {
+    if value.is_empty() || !HEX_COLON_RE.is_match(value) {
+        return Err(format!(
+            "Invalid {}: must be hex with optional colons, got '{}'",
+            field_name, value
+        ));
+    }
+    Ok(())
+}
+
+/// Allowed HID Wiegand format strings.
+const VALID_HID_FORMATS: &[&str] = &["H10301", "H10302", "H10304", "Corp1000"];
+
+fn validate_hid_format(format: &str) -> bool {
+    VALID_HID_FORMATS.contains(&format)
+}
 
 // ---------------------------------------------------------------------------
 // Device / search commands
@@ -28,8 +77,9 @@ pub fn build_t5577_wipe() -> &'static str {
 }
 
 /// Wipe a T5577 that has a known password.
-pub fn build_t5577_wipe_with_password(password: &str) -> String {
-    format!("lf t55xx wipe -p {}", password)
+pub fn build_t5577_wipe_with_password(password: &str) -> Result<String, String> {
+    validate_password(password)?;
+    Ok(format!("lf t55xx wipe -p {}", password))
 }
 
 // ---------------------------------------------------------------------------
@@ -46,8 +96,9 @@ pub fn build_clone_for_em4305(base_cmd: &str) -> String {
 }
 
 /// Append `-p {password}` to a base clone command for password-protected T5577.
-pub fn build_clone_with_password(base_cmd: &str, password: &str) -> String {
-    format!("{} -p {}", base_cmd, password)
+pub fn build_clone_with_password(base_cmd: &str, password: &str) -> Result<String, String> {
+    validate_password(password)?;
+    Ok(format!("{} -p {}", base_cmd, password))
 }
 
 // ---------------------------------------------------------------------------
@@ -244,12 +295,17 @@ pub fn build_verify_command(card_type: &CardType) -> &'static str {
 // ---------------------------------------------------------------------------
 
 /// Build the appropriate clone command for a given card type + data.
-/// Returns None if clone is not supported for this type.
+/// Returns None if clone is not supported for this type or if input validation fails.
 pub fn build_clone_command(
     card_type: &CardType,
     uid: &str,
     decoded: &std::collections::HashMap<String, String>,
 ) -> Option<String> {
+    // Validate uid: must be hex with optional colons (no spaces, semicolons, or other injection vectors)
+    if !HEX_COLON_RE.is_match(uid) {
+        return None;
+    }
+
     match card_type {
         CardType::EM4100 => Some(build_em4100_clone(uid)),
 
@@ -258,14 +314,26 @@ pub fn build_clone_command(
                 (decoded.get("facility_code"), decoded.get("card_number"))
             {
                 if let (Ok(fc_n), Ok(cn_n)) = (fc.parse::<u32>(), cn.parse::<u32>()) {
-                    let fmt = decoded.get("format").map(|s| s.as_str());
+                    // Validate HID format against allowlist
+                    let fmt = decoded
+                        .get("format")
+                        .map(|s| s.as_str())
+                        .filter(|f| validate_hid_format(f));
                     return Some(build_hid_clone(fc_n, cn_n, fmt));
                 }
             }
-            decoded.get("raw").map(|raw| build_hid_clone_raw(raw))
+            // Validate raw hex before using
+            decoded
+                .get("raw")
+                .filter(|raw| validate_hex(raw, "raw").is_ok())
+                .map(|raw| build_hid_clone_raw(raw))
         }
 
-        CardType::Indala => Some(build_indala_clone(uid)),
+        CardType::Indala => {
+            // Prefer raw hex from parser (avoids using decimal UID as --raw)
+            let raw = decoded.get("raw").map(|s| s.as_str()).unwrap_or(uid);
+            Some(build_indala_clone(raw))
+        }
 
         CardType::IOProx => {
             if let (Some(fc), Some(cn)) =
@@ -274,11 +342,12 @@ pub fn build_clone_command(
                 let vn = decoded
                     .get("version")
                     .and_then(|v| v.parse::<u32>().ok())
-                    .unwrap_or(1);
+                    .unwrap_or(0);
                 if let (Ok(fc_n), Ok(cn_n)) = (fc.parse::<u32>(), cn.parse::<u32>()) {
                     return Some(build_ioprox_clone(fc_n, cn_n, vn));
                 }
             }
+            // uid already validated at top
             Some(build_ioprox_clone_raw(uid))
         }
 
@@ -302,8 +371,11 @@ pub fn build_clone_command(
                     return Some(build_fdxb_clone(cc, nid));
                 }
             }
-            // Fallback to raw
-            if let Some(raw) = decoded.get("raw") {
+            // Fallback to raw (validated) then uid (already validated at top)
+            if let Some(raw) = decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+            {
                 Some(build_fdxb_clone_raw(raw))
             } else {
                 Some(build_fdxb_clone_raw(uid))
@@ -318,6 +390,7 @@ pub fn build_clone_command(
                     return Some(build_paradox_clone(fc_n, cn_n));
                 }
             }
+            // uid already validated at top
             Some(build_paradox_clone_raw(uid))
         }
 
@@ -335,7 +408,11 @@ pub fn build_clone_command(
         }
 
         CardType::Keri => {
-            let keri_type = decoded.get("keri_type").map(|s| s.as_str());
+            // Validate keri_type: must be "i" or "m" only
+            let keri_type = decoded
+                .get("keri_type")
+                .map(|s| s.as_str())
+                .filter(|t| *t == "i" || *t == "m");
             Some(build_keri_clone(uid, keri_type))
         }
 
@@ -351,6 +428,7 @@ pub fn build_clone_command(
                     return Some(build_presco_clone(sc_n, uc_n));
                 }
             }
+            // uid already validated at top (hex with optional colons)
             Some(build_presco_clone_hex(uid))
         }
 
@@ -396,7 +474,11 @@ pub fn build_clone_command(
         }
 
         CardType::PAC => {
-            if let Some(raw) = decoded.get("raw") {
+            // Validate raw hex before using
+            if let Some(raw) = decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+            {
                 return Some(build_pac_clone_raw(raw));
             }
             if let Some(cn) = decoded.get("card_number") {
@@ -406,7 +488,10 @@ pub fn build_clone_command(
         }
 
         CardType::Noralsy => {
-            if let Some(raw) = decoded.get("raw") {
+            if let Some(raw) = decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+            {
                 Some(build_noralsy_clone(raw))
             } else {
                 Some(build_noralsy_clone(uid))
@@ -415,14 +500,19 @@ pub fn build_clone_command(
 
         CardType::Jablotron => {
             if let Some(cn) = decoded.get("card_number") {
-                Some(build_jablotron_clone(cn))
-            } else {
-                Some(build_jablotron_clone(uid))
+                // card_number for Jablotron is hex
+                if validate_hex(cn, "card_number").is_ok() {
+                    return Some(build_jablotron_clone(cn));
+                }
             }
+            Some(build_jablotron_clone(uid))
         }
 
         CardType::SecuraKey => {
-            if let Some(raw) = decoded.get("raw") {
+            if let Some(raw) = decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+            {
                 Some(build_securakey_clone(raw))
             } else {
                 Some(build_securakey_clone(uid))
@@ -439,7 +529,10 @@ pub fn build_clone_command(
         }
 
         CardType::Motorola => {
-            if let Some(raw) = decoded.get("raw") {
+            if let Some(raw) = decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+            {
                 Some(build_motorola_clone(raw))
             } else {
                 Some(build_motorola_clone(uid))
@@ -447,7 +540,10 @@ pub fn build_clone_command(
         }
 
         CardType::IDTECK => {
-            if let Some(raw) = decoded.get("raw") {
+            if let Some(raw) = decoded
+                .get("raw")
+                .filter(|r| validate_hex(r, "raw").is_ok())
+            {
                 Some(build_idteck_clone(raw))
             } else {
                 Some(build_idteck_clone(uid))
@@ -468,14 +564,15 @@ pub fn build_clone_command(
 }
 
 /// Determine the wipe command based on blank type.
-pub fn build_wipe_command(blank_type: &BlankType, password: Option<&str>) -> String {
+/// Returns `None` for unsupported blank types or invalid passwords.
+pub fn build_wipe_command(blank_type: &BlankType, password: Option<&str>) -> Option<String> {
     match blank_type {
-        BlankType::EM4305 => build_em4305_wipe().to_string(),
+        BlankType::EM4305 => Some(build_em4305_wipe().to_string()),
         BlankType::T5577 => match password {
-            Some(pw) => build_t5577_wipe_with_password(pw),
-            None => build_t5577_wipe().to_string(),
+            Some(pw) => Some(build_t5577_wipe_with_password(pw).ok()?),
+            None => Some(build_t5577_wipe().to_string()),
         },
         // Other blank types don't have a wipe command in this module
-        _ => String::new(),
+        _ => None,
     }
 }

@@ -48,6 +48,26 @@ pub async fn write_clone_with_data(
         ));
     }
 
+    // Validate uid: must be non-empty hex with optional colons (blocks semicolons, spaces, injection)
+    if uid.is_empty() || !uid.chars().all(|c| c.is_ascii_hexdigit() || c == ':') {
+        return Err(AppError::CommandFailed(
+            "Invalid UID: must contain only hex characters and colons".into(),
+        ));
+    }
+    if uid.len() > 200 {
+        return Err(AppError::CommandFailed("UID too long".into()));
+    }
+
+    // Validate port format
+    if port.is_empty()
+        || port.len() > 50
+        || port.contains(';')
+        || port.contains('\n')
+        || port.contains('\r')
+    {
+        return Err(AppError::CommandFailed("Invalid port".into()));
+    }
+
     let blank = blank_type.unwrap_or_else(|| card_type.recommended_blank());
 
     // Guard: reject EM4305 blank for card types that don't support the --em flag.
@@ -191,7 +211,8 @@ async fn write_t5577_flow(
     // Step 3: Wipe (with password if needed)
     update_progress(app, machine, 0.35, Some(2), Some(6))?;
 
-    let wipe_cmd = command_builder::build_wipe_command(&BlankType::T5577, password.as_deref());
+    let wipe_cmd = command_builder::build_wipe_command(&BlankType::T5577, password.as_deref())
+        .ok_or_else(|| AppError::CommandFailed("No wipe command for this blank type".into()))?;
     connection::run_command(app, port, &wipe_cmd).await?;
 
     // Step 4: Verify wipe — ensure T5577 is detected and no longer password-protected.
@@ -214,17 +235,35 @@ async fn write_t5577_flow(
         );
     }
 
-    // Step 5: Clone (with password if needed)
+    // SAFETY: Password was cleared by wipe. Using the old password on the clone
+    // command would re-lock the card. Shadow the variable to prevent accidental use.
+    let password: Option<String> = None;
+
+    // Step 5: Clone
     update_progress(app, machine, 0.7, Some(4), Some(6))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
         Some(cmd) => {
             let final_cmd = match &password {
-                Some(pw) => command_builder::build_clone_with_password(&cmd, pw),
+                Some(pw) => command_builder::build_clone_with_password(&cmd, pw)
+                    .map_err(|e| AppError::CommandFailed(format!("Password validation failed: {}", e)))?,
                 None => cmd,
             };
-            connection::run_command(app, port, &final_cmd).await?;
+            let clone_output = connection::run_command(app, port, &final_cmd).await?;
+            // Check for failure indicators in PM3 output
+            if clone_output.to_lowercase().contains("fail")
+                || clone_output.to_lowercase().contains("error")
+                || clone_output.contains("[-]")
+            {
+                return report_error(
+                    machine,
+                    &format!("Clone command may have failed: {}", clone_output.chars().take(200).collect::<String>()),
+                    "Write may have failed. Do not remove the card — try again.",
+                    true,
+                    Some(RecoveryAction::Retry),
+                );
+            }
         }
         None => {
             return report_error(
@@ -276,7 +315,20 @@ async fn write_em4305_flow(
     match base_clone_cmd {
         Some(cmd) => {
             let em_cmd = command_builder::build_clone_for_em4305(&cmd);
-            connection::run_command(app, port, &em_cmd).await?;
+            let clone_output = connection::run_command(app, port, &em_cmd).await?;
+            // Check for failure indicators in PM3 output
+            if clone_output.to_lowercase().contains("fail")
+                || clone_output.to_lowercase().contains("error")
+                || clone_output.contains("[-]")
+            {
+                return report_error(
+                    machine,
+                    &format!("EM4305 clone may have failed: {}", clone_output.chars().take(200).collect::<String>()),
+                    "Write may have failed. Do not remove the card — try again.",
+                    true,
+                    Some(RecoveryAction::Retry),
+                );
+            }
         }
         None => {
             return report_error(

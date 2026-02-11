@@ -27,15 +27,19 @@ static HID_FC_CN_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static HID_RAW_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)RAW[:/\s]*([0-9A-Fa-f]+)").expect("bad hid raw regex"));
+    LazyLock::new(|| Regex::new(r"(?i)(?:HID|Prox).*?RAW[:/\s]*([0-9A-Fa-f]+)").expect("bad hid raw regex"));
 
 static HID_FORMAT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:H10301|H10302|H10304|Corp\s*1000|26[- ]?bit|34[- ]?bit|35[- ]?bit|37[- ]?bit)")
         .expect("bad hid format regex")
 });
 
-static INDALA_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)Indala.*?(?:ID|Raw)[:/\s]*([0-9A-Fa-f]+)").expect("bad indala regex")
+static INDALA_RAW_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Indala.*?Raw[:/\s]*([0-9A-Fa-f]+)").expect("bad indala raw regex")
+});
+
+static INDALA_UID_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Indala.*?ID[:/\s]*([0-9A-Fa-f]+)").expect("bad indala uid regex")
 });
 
 static IOPROX_FC_CN_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -100,9 +104,12 @@ static PRESCO_SC_UC_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("bad presco sc/uc regex")
 });
 
-static NEDAP_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)Nedap.*?Card[:/\s]*(\d+).*?Sub(?:type)?[:/\s]*(\d+)")
-        .expect("bad nedap regex")
+static NEDAP_CARD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Nedap.*?Card[:/\s]*(\d+)").expect("bad nedap card regex")
+});
+
+static NEDAP_SUB_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Nedap.*?Sub(?:type)?[:/\s]*(\d+)").expect("bad nedap sub regex")
 });
 
 static GPROXII_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -115,6 +122,10 @@ static GALLAGHER_RE: LazyLock<Regex> = LazyLock::new(|| {
         r"(?i)Gallagher.*?Region\s+Code[:/\s]*(\d+).*?Facility\s+Code[:/\s]*(\d+).*?Card\s+Number[:/\s]*(\d+).*?Issue\s+Level[:/\s]*(\d+)",
     )
     .expect("bad gallagher regex")
+});
+
+static PAC_DETECT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\[\+\].*\b(?:PAC|Stanley)\b").expect("bad pac detect regex")
 });
 
 static PAC_CN_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -240,8 +251,25 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
 
     // Indala
     if clean.contains("Indala") {
-        if let Some(caps) = INDALA_RE.captures(&clean) {
-            let uid = caps[1].to_uppercase();
+        let raw_hex = INDALA_RAW_RE.captures(&clean).map(|c| c[1].to_uppercase());
+        let uid_val = INDALA_UID_RE.captures(&clean).map(|c| c[1].to_uppercase());
+
+        if let Some(ref raw) = raw_hex {
+            let uid = uid_val.as_deref().unwrap_or(raw).to_string();
+            let mut decoded = HashMap::new();
+            decoded.insert("type".to_string(), "Indala".to_string());
+            decoded.insert("raw".to_string(), raw.clone());
+            decoded.insert("id".to_string(), uid.clone());
+            return Some((
+                CardType::Indala,
+                CardData {
+                    uid,
+                    raw: raw.clone(),
+                    decoded,
+                },
+            ));
+        } else if let Some(uid) = uid_val {
+            // No raw available — use UID as fallback (may be hex ID)
             let mut decoded = HashMap::new();
             decoded.insert("type".to_string(), "Indala".to_string());
             decoded.insert("id".to_string(), uid.clone());
@@ -336,9 +364,10 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
 
     // Nedap
     if clean.contains("Nedap") || clean.contains("NEDAP") {
-        if let Some(caps) = NEDAP_RE.captures(&clean) {
-            let cn = caps[1].to_string();
-            let st = caps[2].to_string();
+        let cn = NEDAP_CARD_RE.captures(&clean).map(|c| c[1].to_string());
+        let st = NEDAP_SUB_RE.captures(&clean).map(|c| c[1].to_string());
+        if let Some(cn) = cn {
+            let st = st.unwrap_or_else(|| "0".to_string());
             let uid = format!("ST{}:CN{}", st, cn);
             let mut decoded = HashMap::new();
             decoded.insert("type".to_string(), "Nedap".to_string());
@@ -361,7 +390,7 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
     }
 
     // PAC/Stanley
-    if clean.contains("PAC") || clean.contains("Stanley") {
+    if PAC_DETECT_RE.is_match(&clean) {
         return parse_pac(&clean);
     }
 
@@ -576,9 +605,10 @@ fn parse_ioprox(clean: &str) -> Option<(CardType, CardData)> {
 
     // Try FC/CN/VN first
     if let Some(caps) = IOPROX_FC_CN_RE.captures(clean) {
-        if let Some(vn_match) = caps.get(1) {
-            decoded.insert("version".to_string(), vn_match.as_str().to_string());
-        }
+        let vn = caps.get(1)
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_else(|| "0".to_string());
+        decoded.insert("version".to_string(), vn);
         let fc = caps[2].to_string();
         let cn = caps[3].to_string();
         decoded.insert("facility_code".to_string(), fc.clone());
