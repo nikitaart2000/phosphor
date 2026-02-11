@@ -8,11 +8,13 @@ interface BlankStepProps {
   isLoading?: boolean;
   expectedBlank?: BlankType | null;
   blankType?: BlankType | null;
+  readyToWrite?: boolean;
+  onReset?: () => void;
 }
 
 const DETECT_FRAMES = ['.  ', '.. ', '...', ' ..', '  .', '   '];
 
-export function BlankStep({ onReady, isLoading, expectedBlank, blankType }: BlankStepProps) {
+export function BlankStep({ onReady, isLoading, expectedBlank, blankType, readyToWrite, onReset }: BlankStepProps) {
   const sfx = useSfx();
   const [frameIdx, setFrameIdx] = useState(0);
 
@@ -35,8 +37,36 @@ export function BlankStep({ onReady, isLoading, expectedBlank, blankType }: Blan
         </div>
 
         {isLoading ? (
-          <div style={{ color: 'var(--green-dim)' }}>
-            DETECTING{DETECT_FRAMES[frameIdx]}
+          <div>
+            <div style={{ color: 'var(--green-dim)' }}>
+              DETECTING{DETECT_FRAMES[frameIdx]}
+            </div>
+            {onReset && (
+              <div style={{ marginTop: '16px' }}>
+                <button
+                  onClick={() => { sfx.action(); onReset(); }}
+                  style={{
+                    background: 'var(--bg-void)',
+                    color: 'var(--red-bright)',
+                    border: '2px solid var(--red-bright)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    padding: '6px 20px',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    sfx.hover();
+                    e.currentTarget.style.background = 'rgba(255, 0, 51, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-void)';
+                  }}
+                >
+                  [X] CANCEL
+                </button>
+              </div>
+            )}
           </div>
         ) : blankType ? (
           <>
@@ -52,17 +82,20 @@ export function BlankStep({ onReady, isLoading, expectedBlank, blankType }: Blan
             <div style={{ marginTop: '16px' }}>
               <button
                 onClick={() => { sfx.action(); onReady(); }}
+                disabled={readyToWrite === false}
                 style={{
                   background: 'var(--bg-void)',
-                  color: 'var(--green-bright)',
-                  border: '2px solid var(--green-bright)',
+                  color: readyToWrite === false ? 'var(--green-dim)' : 'var(--green-bright)',
+                  border: `2px solid ${readyToWrite === false ? 'var(--green-dim)' : 'var(--green-bright)'}`,
                   fontFamily: 'var(--font-mono)',
                   fontSize: '13px',
                   fontWeight: 600,
                   padding: '6px 20px',
-                  cursor: 'pointer',
+                  cursor: readyToWrite === false ? 'not-allowed' : 'pointer',
+                  opacity: readyToWrite === false ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
+                  if (readyToWrite === false) return;
                   sfx.hover();
                   e.currentTarget.style.background = 'var(--green-ghost)';
                 }}

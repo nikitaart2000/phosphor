@@ -81,7 +81,8 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     const unlisten = listen<WriteProgressPayload>('write-progress', (event) => {
       send({
         type: 'WRITE_PROGRESS',
-        progress: event.payload.progress * 100,
+        // Rust backend sends progress as 0.0–1.0; XState/UI expects 0–100.
+        progress: Math.min(100, Math.max(0, event.payload.progress * 100)),
         currentBlock: event.payload.current_block,
         totalBlocks: event.payload.total_blocks,
       });
@@ -109,9 +110,18 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     [stateValue],
   );
 
-  const detect = useCallback(() => send({ type: 'DETECT' }), [send]);
-  const scan = useCallback(() => send({ type: 'SCAN' }), [send]);
-  const write = useCallback(() => send({ type: 'WRITE' }), [send]);
+  const detect = useCallback(() => {
+    if (isLoading) return;
+    send({ type: 'DETECT' });
+  }, [send, isLoading]);
+  const scan = useCallback(() => {
+    if (isLoading) return;
+    send({ type: 'SCAN' });
+  }, [send, isLoading]);
+  const write = useCallback(() => {
+    if (isLoading) return;
+    send({ type: 'WRITE' });
+  }, [send, isLoading]);
   const reset = useCallback(async () => {
     try {
       await api.resetWizard();
@@ -175,9 +185,13 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     }
   }, [send, state.context, reset]);
 
+  // Destructure context for granular memo deps — avoids re-renders from
+  // write-progress updates reaching components that only need step/device info.
+  const ctx = state.context;
+
   const wizardReturn = useMemo<UseWizardReturn>(
     () => ({
-      context: state.context,
+      context: ctx,
       currentStep,
       isStep,
       isLoading,
@@ -189,7 +203,28 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       reset,
       send,
     }),
-    [state.context, currentStep, isStep, isLoading, detect, scan, skipToBlank, write, finish, reset, send],
+    [
+      // Step & loading
+      currentStep, isStep, isLoading,
+      // Device
+      ctx.port, ctx.model, ctx.firmware,
+      // Card
+      ctx.frequency, ctx.cardType, ctx.cardData,
+      ctx.cloneable, ctx.recommendedBlank,
+      // Blank
+      ctx.expectedBlank, ctx.blankType, ctx.readyToWrite,
+      // Write progress
+      ctx.writeProgress, ctx.currentBlock, ctx.totalBlocks,
+      // Verification
+      ctx.verifySuccess, ctx.mismatchedBlocks,
+      // Completion
+      ctx.completionTimestamp,
+      // Error
+      ctx.errorMessage, ctx.errorUserMessage,
+      ctx.errorRecoverable, ctx.errorRecoveryAction, ctx.errorSource,
+      // Callbacks
+      detect, scan, skipToBlank, write, finish, reset, send,
+    ],
   );
 
   return (

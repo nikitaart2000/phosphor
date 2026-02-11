@@ -63,6 +63,7 @@ export function WizardContainer() {
             expectedBlank={wizard.context.expectedBlank}
             isLoading={true}
             onReady={() => {}}
+            onReset={wizard.reset}
           />
         );
       case 'BlankDetected':
@@ -70,6 +71,7 @@ export function WizardContainer() {
           <BlankStep
             expectedBlank={wizard.context.expectedBlank}
             blankType={wizard.context.blankType}
+            readyToWrite={wizard.context.readyToWrite}
             isLoading={false}
             onReady={wizard.write}
           />
@@ -81,6 +83,7 @@ export function WizardContainer() {
             currentBlock={wizard.context.currentBlock}
             totalBlocks={wizard.context.totalBlocks}
             cardType={wizard.context.cardType}
+            blankType={wizard.context.blankType}
             isLoading={true}
           />
         );
@@ -89,6 +92,7 @@ export function WizardContainer() {
           <VerifyStep
             isLoading={true}
             onContinue={() => {}}
+            onReset={wizard.reset}
           />
         );
       case 'VerificationComplete':

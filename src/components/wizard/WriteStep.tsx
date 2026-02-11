@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { TerminalPanel } from '../shared/TerminalPanel';
 import { ProgressBar } from '../shared/ProgressBar';
 import { StepIndicator, type Step } from '../shared/StepIndicator';
-import type { CardType } from '../../machines/types';
+import type { BlankType, CardType } from '../../machines/types';
 
 interface WriteStepProps {
   isLoading?: boolean;
@@ -10,18 +10,31 @@ interface WriteStepProps {
   currentBlock?: number | null;
   totalBlocks?: number | null;
   cardType?: CardType | null;
+  blankType?: BlankType | null;
 }
 
-// Derive step statuses from the progress percentage
-function getPhaseSteps(progress: number): Step[] {
-  // DETECT (0-10%), SAFETY CHECK (10-25%), WIPE (25-50%), CLONE (50-75%), FINALIZE (75-100%)
-  const phases: { label: string; start: number; end: number }[] = [
-    { label: 'DETECT BLANK', start: 0, end: 10 },
-    { label: 'SAFETY CHECK', start: 10, end: 25 },
-    { label: 'WIPE', start: 25, end: 50 },
-    { label: 'CLONE DATA', start: 50, end: 75 },
-    { label: 'FINALIZE', start: 75, end: 100 },
-  ];
+// Phase definitions matching the Rust write flow step counts.
+// T5577: 6 steps (detect, password check, wipe, verify wipe, clone, finalize)
+// EM4305: 5 steps (detect, wipe, verify wipe, clone, finalize)
+const T5577_PHASES: { label: string; start: number; end: number }[] = [
+  { label: 'DETECT BLANK', start: 0, end: 10 },
+  { label: 'PASSWORD CHECK', start: 10, end: 20 },
+  { label: 'WIPE', start: 20, end: 35 },
+  { label: 'VERIFY WIPE', start: 35, end: 50 },
+  { label: 'CLONE DATA', start: 50, end: 75 },
+  { label: 'FINALIZE', start: 75, end: 100 },
+];
+
+const EM4305_PHASES: { label: string; start: number; end: number }[] = [
+  { label: 'DETECT BLANK', start: 0, end: 10 },
+  { label: 'WIPE', start: 10, end: 30 },
+  { label: 'VERIFY WIPE', start: 30, end: 50 },
+  { label: 'CLONE DATA', start: 50, end: 75 },
+  { label: 'FINALIZE', start: 75, end: 100 },
+];
+
+function getPhaseSteps(progress: number, blankType?: BlankType | null): Step[] {
+  const phases = blankType === 'EM4305' ? EM4305_PHASES : T5577_PHASES;
 
   return phases.map(({ label, start, end }): Step => {
     if (progress >= end) {
@@ -40,8 +53,9 @@ export function WriteStep({
   currentBlock,
   totalBlocks,
   cardType,
+  blankType,
 }: WriteStepProps) {
-  const steps = useMemo(() => getPhaseSteps(progress), [progress]);
+  const steps = useMemo(() => getPhaseSteps(progress, blankType), [progress, blankType]);
 
   const blockInfo = currentBlock !== null && currentBlock !== undefined && totalBlocks
     ? `Block ${currentBlock}/${totalBlocks}`
