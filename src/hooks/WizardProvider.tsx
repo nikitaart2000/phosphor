@@ -112,14 +112,35 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   const detect = useCallback(() => send({ type: 'DETECT' }), [send]);
   const scan = useCallback(() => send({ type: 'SCAN' }), [send]);
   const skipToBlank = useCallback(
-    (expectedBlank: BlankType) => send({ type: 'SKIP_TO_BLANK', expectedBlank }),
+    async (expectedBlank: BlankType) => {
+      // Sync Rust FSM: CardIdentified → WaitingForBlank
+      try { await api.proceedToWrite(); } catch { /* best-effort */ }
+      send({ type: 'SKIP_TO_BLANK', expectedBlank });
+    },
     [send],
   );
   const write = useCallback(() => send({ type: 'WRITE' }), [send]);
   const finish = useCallback(async () => {
+    // Sync Rust FSM: VerificationComplete → Complete
+    const ctx = state.context;
+    if (ctx.cardType && ctx.cardData) {
+      try {
+        await api.markComplete(
+          {
+            card_type: ctx.cardType,
+            uid: ctx.cardData.uid,
+            display_name: ctx.cardType,
+          },
+          {
+            card_type: ctx.blankType ?? 'T5577',
+            uid: ctx.cardData.uid,
+            display_name: ctx.blankType ?? 'T5577',
+          },
+        );
+      } catch { /* best-effort */ }
+    }
     send({ type: 'FINISH' });
     // Save clone record to history after successful verification
-    const ctx = state.context;
     if (ctx.verifySuccess && ctx.cardType && ctx.cardData && ctx.port) {
       try {
         await api.saveCloneRecord({

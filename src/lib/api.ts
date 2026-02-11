@@ -93,3 +93,25 @@ export async function resetWizard(): Promise<WizardState> {
     action: { action: 'Reset' },
   });
 }
+
+/**
+ * Send ProceedToWrite action to advance Rust FSM from CardIdentified → WaitingForBlank.
+ */
+export async function proceedToWrite(): Promise<WizardState> {
+  return invoke<WizardState>('wizard_action', {
+    action: { action: 'ProceedToWrite' },
+  });
+}
+
+/**
+ * Send MarkComplete action to advance Rust FSM from VerificationComplete → Complete.
+ * Requires source and target CardSummary objects.
+ */
+export async function markComplete(
+  source: { card_type: string; uid: string; display_name: string },
+  target: { card_type: string; uid: string; display_name: string },
+): Promise<WizardState> {
+  return invoke<WizardState>('wizard_action', {
+    action: { action: 'MarkComplete', payload: { source, target } },
+  });
+}

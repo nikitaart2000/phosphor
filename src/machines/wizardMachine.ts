@@ -120,23 +120,30 @@ export const wizardMachine = setup({
       return api.scanCard();
     }),
     detectBlank: fromPromise<WizardState, WizardContext>(async ({ input }) => {
-      return api.detectBlank(input.port!);
+      if (!input.port) throw new Error('No device port available');
+      return api.detectBlank(input.port);
     }),
     writeClone: fromPromise<WizardState, WizardContext>(async ({ input }) => {
+      if (!input.port) throw new Error('No device port available');
+      if (!input.cardType) throw new Error('No card type identified');
+      if (!input.cardData) throw new Error('No card data available');
       return api.writeCloneWithData(
-        input.port!,
-        input.cardType!,
-        input.cardData!.uid,
-        input.cardData!.decoded,
+        input.port,
+        input.cardType,
+        input.cardData.uid,
+        input.cardData.decoded,
         input.blankType ?? undefined,
       );
     }),
     verifyClone: fromPromise<WizardState, WizardContext>(async ({ input }) => {
+      if (!input.port) throw new Error('No device port available');
+      if (!input.cardType) throw new Error('No card type identified');
+      if (!input.cardData) throw new Error('No card data available');
       return api.verifyCloneWithData(
-        input.port!,
-        input.cardData!.uid,
-        input.cardType!,
-        input.cardData!.decoded,
+        input.port,
+        input.cardData.uid,
+        input.cardType,
+        input.cardData.decoded,
         input.blankType ?? undefined,
       );
     }),
@@ -406,7 +413,7 @@ export const wizardMachine = setup({
       on: {
         WRITE_PROGRESS: {
           actions: assign({
-            writeProgress: ({ event }) => event.progress * 100,
+            writeProgress: ({ event }) => event.progress,
             currentBlock: ({ event }) => event.currentBlock,
             totalBlocks: ({ event }) => event.totalBlocks,
           }),
@@ -472,16 +479,8 @@ export const wizardMachine = setup({
             completionTimestamp: () => new Date().toISOString(),
           }),
         },
-        WRITE: {
-          target: 'waitingForBlank',
-          actions: assign({
-            writeProgress: () => 0,
-            currentBlock: () => null,
-            totalBlocks: () => null,
-            verifySuccess: () => null,
-            mismatchedBlocks: () => [] as number[],
-          }),
-        },
+        // No WRITE transition: Rust FSM has no VerificationComplete → WaitingForBlank path.
+        // On failed verification, user must RESET and start over.
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },

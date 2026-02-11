@@ -86,10 +86,12 @@ export function HistoryView() {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     getHistory()
       .then((data: CloneRecord[]) => {
         if (!cancelled) {
@@ -106,7 +108,9 @@ export function HistoryView() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
+
+  const handleRefresh = () => setRefreshKey((k) => k + 1);
 
   // Loading state
   if (loading) {
@@ -136,6 +140,22 @@ export function HistoryView() {
         }}>
           [XX] Error loading history: {error}
         </div>
+        <button
+          onClick={handleRefresh}
+          style={{
+            background: 'none',
+            border: '1px solid var(--green-dim)',
+            color: 'var(--green-dim)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            padding: '2px 8px',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--green-bright)'; e.currentTarget.style.borderColor = 'var(--green-bright)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--green-dim)'; e.currentTarget.style.borderColor = 'var(--green-dim)'; }}
+        >
+          RETRY
+        </button>
       </TerminalPanel>
     );
   }
@@ -176,8 +196,24 @@ export function HistoryView() {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--green-dim)' }}>
-        {records.length} records | {successCount} successful
+      <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--green-dim)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span>{records.length} records | {successCount} successful</span>
+        <button
+          onClick={handleRefresh}
+          style={{
+            background: 'none',
+            border: '1px solid var(--green-dim)',
+            color: 'var(--green-dim)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            padding: '2px 8px',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--green-bright)'; e.currentTarget.style.borderColor = 'var(--green-bright)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--green-dim)'; e.currentTarget.style.borderColor = 'var(--green-dim)'; }}
+        >
+          REFRESH
+        </button>
       </div>
     </TerminalPanel>
   );

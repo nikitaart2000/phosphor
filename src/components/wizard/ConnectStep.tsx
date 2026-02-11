@@ -74,21 +74,25 @@ export function ConnectStep({ onConnected, isLoading, device }: ConnectStepProps
             No device detected. Connect a Proxmark3 and press CONNECT.
           </div>
           <button
-            onClick={() => { sfx.action(); onConnected(); }}
+            onClick={() => { if (!isLoading) { sfx.action(); onConnected(); } }}
+            disabled={isLoading}
             style={{
               background: 'var(--bg-void)',
-              color: 'var(--green-bright)',
-              border: '2px solid var(--green-bright)',
+              color: isLoading ? 'var(--green-dim)' : 'var(--green-bright)',
+              border: `2px solid ${isLoading ? 'var(--green-dim)' : 'var(--green-bright)'}`,
               fontFamily: 'var(--font-mono)',
               fontSize: '14px',
               fontWeight: 600,
               padding: '8px 24px',
-              cursor: 'pointer',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
               textTransform: 'uppercase',
+              opacity: isLoading ? 0.5 : 1,
             }}
             onMouseEnter={(e) => {
-              sfx.hover();
-              e.currentTarget.style.background = 'var(--green-ghost)';
+              if (!isLoading) {
+                sfx.hover();
+                e.currentTarget.style.background = 'var(--green-ghost)';
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'var(--bg-void)';
