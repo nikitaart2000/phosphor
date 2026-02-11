@@ -7,16 +7,8 @@ use crate::cards::types::{BlankType, CardType};
 // Device / search commands
 // ---------------------------------------------------------------------------
 
-pub fn build_detect_command() -> &'static str {
-    "hw version"
-}
-
 pub fn build_lf_search() -> &'static str {
     "lf search"
-}
-
-pub fn build_hf_search() -> &'static str {
-    "hf search"
 }
 
 // ---------------------------------------------------------------------------
@@ -38,11 +30,6 @@ pub fn build_t5577_wipe() -> &'static str {
 /// Wipe a T5577 that has a known password.
 pub fn build_t5577_wipe_with_password(password: &str) -> String {
     format!("lf t55xx wipe -p {}", password)
-}
-
-/// Detect a T5577 that might have a known password.
-pub fn build_t5577_detect_with_password(password: &str) -> String {
-    format!("lf t55xx detect -p {}", password)
 }
 
 // ---------------------------------------------------------------------------
