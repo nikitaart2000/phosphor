@@ -125,7 +125,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     async (expectedBlank: BlankType) => {
       // Sync Rust FSM: CardIdentified → WaitingForBlank
       try {
-        await api.proceedToWrite();
+        await api.proceedToWrite(expectedBlank);
         send({ type: 'SKIP_TO_BLANK', expectedBlank });
       } catch (err) {
         console.error('skipToBlank: Rust proceedToWrite failed, resetting both FSMs', err);

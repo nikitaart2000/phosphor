@@ -70,7 +70,9 @@ pub enum WizardAction {
         cloneable: bool,
         recommended_blank: BlankType,
     },
-    ProceedToWrite,
+    ProceedToWrite {
+        blank_type: BlankType,
+    },
     BlankReady {
         blank_type: BlankType,
     },
@@ -122,7 +124,7 @@ fn action_name(a: &WizardAction) -> &str {
         WizardAction::DeviceFound { .. } => "DeviceFound",
         WizardAction::StartScan => "StartScan",
         WizardAction::CardFound { .. } => "CardFound",
-        WizardAction::ProceedToWrite => "ProceedToWrite",
+        WizardAction::ProceedToWrite { .. } => "ProceedToWrite",
         WizardAction::BlankReady { .. } => "BlankReady",
         WizardAction::StartWrite => "StartWrite",
         WizardAction::UpdateWriteProgress { .. } => "UpdateWriteProgress",
@@ -213,12 +215,10 @@ impl WizardMachine {
 
             // CardIdentified -> WaitingForBlank
             (
-                WizardState::CardIdentified {
-                    recommended_blank, ..
-                },
-                WizardAction::ProceedToWrite,
+                WizardState::CardIdentified { .. },
+                WizardAction::ProceedToWrite { blank_type },
             ) => WizardState::WaitingForBlank {
-                expected_blank: recommended_blank.clone(),
+                expected_blank: blank_type.clone(),
             },
 
             // WaitingForBlank -> BlankDetected

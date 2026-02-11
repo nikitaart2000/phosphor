@@ -165,6 +165,23 @@ static IDTECK_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)IDTECK.*?Raw[:/\s]*([0-9A-Fa-f]+)").expect("bad idteck regex")
 });
 
+static NEXWATCH_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:NexWatch|NXT)\s*ID[:/\s]*(\d+)").expect("bad nexwatch id regex")
+});
+
+static NEXWATCH_RAW_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:NexWatch|NXT).*?Raw[:/\s]*([0-9A-Fa-f]+)")
+        .expect("bad nexwatch raw regex")
+});
+
+static VIKING_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Viking\s*(?:ID|Card\s*ID)[:/\s]*(\d+)").expect("bad viking id regex")
+});
+
+static VIKING_RAW_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)Viking.*?Raw[:/\s]*([0-9A-Fa-f]+)").expect("bad viking raw regex")
+});
+
 // ---------------------------------------------------------------------------
 // Non-cloneable LF detection patterns
 // ---------------------------------------------------------------------------
@@ -339,6 +356,21 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
                 },
             ));
         }
+        // Raw hex fallback — card detected but regex didn't match firmware output format.
+        // Without structured fields, command_builder cannot build a clone command.
+        if let Some(hex) = extract_first_hex_block(&clean) {
+            let mut decoded = HashMap::new();
+            decoded.insert("type".to_string(), "Gallagher".to_string());
+            decoded.insert("raw_fallback".to_string(), "true".to_string());
+            return Some((
+                CardType::Gallagher,
+                CardData {
+                    uid: hex.clone(),
+                    raw: hex,
+                    decoded,
+                },
+            ));
+        }
     }
 
     // GProxII (appears as "Guardall" or "GProx II" in PM3 output)
@@ -356,6 +388,21 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
                 CardData {
                     uid,
                     raw: String::new(),
+                    decoded,
+                },
+            ));
+        }
+        // Raw hex fallback — card detected but regex didn't match firmware output format.
+        // Without structured fields, command_builder cannot build a clone command.
+        if let Some(hex) = extract_first_hex_block(&clean) {
+            let mut decoded = HashMap::new();
+            decoded.insert("type".to_string(), "GProxII".to_string());
+            decoded.insert("raw_fallback".to_string(), "true".to_string());
+            return Some((
+                CardType::GProxII,
+                CardData {
+                    uid: hex.clone(),
+                    raw: hex,
                     decoded,
                 },
             ));
@@ -378,6 +425,21 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
                 CardData {
                     uid,
                     raw: String::new(),
+                    decoded,
+                },
+            ));
+        }
+        // Raw hex fallback — card detected but regex didn't match firmware output format.
+        // Without structured fields, command_builder cannot build a clone command.
+        if let Some(hex) = extract_first_hex_block(&clean) {
+            let mut decoded = HashMap::new();
+            decoded.insert("type".to_string(), "Nedap".to_string());
+            decoded.insert("raw_fallback".to_string(), "true".to_string());
+            return Some((
+                CardType::Nedap,
+                CardData {
+                    uid: hex.clone(),
+                    raw: hex,
                     decoded,
                 },
             ));
@@ -528,6 +590,86 @@ pub fn parse_lf_search(output: &str) -> Option<(CardType, CardData)> {
                 decoded,
             },
         ));
+    }
+
+    // NexWatch — dedicated parsing before generic fallback
+    if clean.contains("NexWatch") || clean.contains("NXT") {
+        let mut decoded = HashMap::new();
+        decoded.insert("type".to_string(), "NexWatch".to_string());
+        // Try dedicated ID pattern first
+        if let Some(caps) = NEXWATCH_ID_RE.captures(&clean) {
+            let id = caps[1].to_string();
+            decoded.insert("card_id".to_string(), id.clone());
+            // Also grab raw if available
+            if let Some(raw_caps) = NEXWATCH_RAW_RE.captures(&clean) {
+                let raw = raw_caps[1].to_uppercase();
+                decoded.insert("raw".to_string(), raw.clone());
+                return Some((
+                    CardType::NexWatch,
+                    CardData { uid: raw.clone(), raw, decoded },
+                ));
+            }
+            return Some((
+                CardType::NexWatch,
+                CardData { uid: id.clone(), raw: id, decoded },
+            ));
+        }
+        // Try raw hex pattern
+        if let Some(caps) = NEXWATCH_RAW_RE.captures(&clean) {
+            let raw = caps[1].to_uppercase();
+            decoded.insert("raw".to_string(), raw.clone());
+            return Some((
+                CardType::NexWatch,
+                CardData { uid: raw.clone(), raw, decoded },
+            ));
+        }
+        // Last resort: generic hex block
+        if let Some(hex) = extract_first_hex_block(&clean) {
+            return Some((
+                CardType::NexWatch,
+                CardData { uid: hex.clone(), raw: hex, decoded },
+            ));
+        }
+    }
+
+    // Viking — dedicated parsing before generic fallback
+    if clean.contains("Viking") || clean.contains("viking") {
+        let mut decoded = HashMap::new();
+        decoded.insert("type".to_string(), "Viking".to_string());
+        // Try dedicated ID pattern first
+        if let Some(caps) = VIKING_ID_RE.captures(&clean) {
+            let id = caps[1].to_string();
+            decoded.insert("card_id".to_string(), id.clone());
+            // Also grab raw if available
+            if let Some(raw_caps) = VIKING_RAW_RE.captures(&clean) {
+                let raw = raw_caps[1].to_uppercase();
+                decoded.insert("raw".to_string(), raw.clone());
+                return Some((
+                    CardType::Viking,
+                    CardData { uid: raw.clone(), raw, decoded },
+                ));
+            }
+            return Some((
+                CardType::Viking,
+                CardData { uid: id.clone(), raw: id, decoded },
+            ));
+        }
+        // Try raw hex pattern
+        if let Some(caps) = VIKING_RAW_RE.captures(&clean) {
+            let raw = caps[1].to_uppercase();
+            decoded.insert("raw".to_string(), raw.clone());
+            return Some((
+                CardType::Viking,
+                CardData { uid: raw.clone(), raw, decoded },
+            ));
+        }
+        // Last resort: generic hex block
+        if let Some(hex) = extract_first_hex_block(&clean) {
+            return Some((
+                CardType::Viking,
+                CardData { uid: hex.clone(), raw: hex, decoded },
+            ));
+        }
     }
 
     // Generic fallback for valid tags using [+] Valid <TYPE>
@@ -785,19 +927,9 @@ fn parse_keri(clean: &str) -> Option<(CardType, CardData)> {
         ));
     }
 
-    // Fallback
-    let raw = extract_first_hex_block(clean).unwrap_or_default();
-    if !raw.is_empty() {
-        return Some((
-            CardType::Keri,
-            CardData {
-                uid: raw.clone(),
-                raw,
-                decoded,
-            },
-        ));
-    }
-
+    // No fallback — extract_first_hex_block is unreliable for Keri and may grab
+    // the wrong hex value. command_builder needs keri_type + valid raw for --type
+    // flag, so it's better to report "card not readable" than clone with wrong data.
     None
 }
 

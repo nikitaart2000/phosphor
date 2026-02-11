@@ -1,7 +1,7 @@
 // Typed Tauri invoke wrappers for PM3 backend commands.
 
 import { invoke } from '@tauri-apps/api/core';
-import type { WizardState, CloneRecord } from '../machines/types';
+import type { WizardState, CloneRecord, BlankType } from '../machines/types';
 
 /**
  * Detect connected Proxmark3 device.
@@ -96,10 +96,11 @@ export async function resetWizard(): Promise<WizardState> {
 
 /**
  * Send ProceedToWrite action to advance Rust FSM from CardIdentified → WaitingForBlank.
+ * @param blankType The blank card type selected by the user.
  */
-export async function proceedToWrite(): Promise<WizardState> {
+export async function proceedToWrite(blankType: BlankType): Promise<WizardState> {
   return invoke<WizardState>('wizard_action', {
-    action: { action: 'ProceedToWrite' },
+    action: { action: 'ProceedToWrite', payload: { blank_type: blankType } },
   });
 }
 

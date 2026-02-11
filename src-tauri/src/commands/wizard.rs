@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::cards::types::CardSummary;
+use crate::cards::types::{BlankType, CardSummary};
 use crate::error::AppError;
 use crate::state::{WizardAction, WizardMachine, WizardState};
 
@@ -26,7 +26,9 @@ pub fn get_wizard_state(
 pub enum UserAction {
     Reset,
     Retry,
-    ProceedToWrite,
+    ProceedToWrite {
+        blank_type: BlankType,
+    },
     StartDetection,
     StartScan,
     StartWrite,
@@ -41,7 +43,9 @@ impl UserAction {
         match self {
             UserAction::Reset => WizardAction::Reset,
             UserAction::Retry => WizardAction::Retry,
-            UserAction::ProceedToWrite => WizardAction::ProceedToWrite,
+            UserAction::ProceedToWrite { blank_type } => {
+                WizardAction::ProceedToWrite { blank_type }
+            }
             UserAction::StartDetection => WizardAction::StartDetection,
             UserAction::StartScan => WizardAction::StartScan,
             UserAction::StartWrite => WizardAction::StartWrite,

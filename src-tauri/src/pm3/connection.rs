@@ -36,10 +36,10 @@ fn pm3_scope_names() -> Vec<&'static str> {
 }
 
 /// Validates that a port string matches expected serial port patterns.
-/// Accepts COM1-COM99 (Windows), /dev/ttyACM0-99, /dev/ttyUSB0-99 (Linux),
+/// Accepts COM1-COM256+ (Windows), /dev/ttyACM0-99, /dev/ttyUSB0-99 (Linux),
 /// and /dev/tty.usbmodem* (macOS).
 static PORT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(COM\d{1,2}|/dev/tty(ACM|USB)\d{1,2}|/dev/tty\.usbmodem\w+)$")
+    Regex::new(r"^(COM[1-9]\d*|/dev/tty(ACM|USB)\d{1,2}|/dev/tty\.usbmodem\w+)$")
         .expect("bad port regex")
 });
 
