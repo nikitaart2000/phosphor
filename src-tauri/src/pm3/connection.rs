@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use regex::Regex;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
 use tokio::time::timeout;
 
@@ -226,25 +226,16 @@ fn build_port_candidates() -> Vec<String> {
 /// error, non-zero exit code). Callers should fall through to PATH-based lookup
 /// on failure.
 ///
-/// The sidecar binary depends on DLLs bundled in `pm3-libs/` (Qt5, ICU, etc.).
-/// We prepend the DLL directory to PATH so the OS can find them at load time.
+/// The sidecar binary depends on DLLs (Qt5, ICU, etc.) bundled in the same
+/// directory via `bundle.resources`. The Windows DLL loader finds them
+/// automatically since they share the sidecar's directory.
 async fn try_sidecar(app: &AppHandle, port: &str, cmd: &str) -> Result<String, AppError> {
-    // Resolve the resource directory where pm3-libs/ DLLs are bundled.
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .map_err(|e| AppError::CommandFailed(format!("Cannot resolve resource dir: {}", e)))?;
-    let dll_dir = resource_dir.join("pm3-libs");
-    let system_path = std::env::var("PATH").unwrap_or_default();
-    let new_path = format!("{};{}", dll_dir.display(), system_path);
-
     let sidecar = app
         .shell()
         .sidecar("binaries/proxmark3")
         .map_err(|e| AppError::CommandFailed(format!("Sidecar not available: {}", e)))?;
 
     let output_future = sidecar
-        .env("PATH", &new_path)
         .args(["-p", port, "-f", "-c", cmd])
         .output();
 
