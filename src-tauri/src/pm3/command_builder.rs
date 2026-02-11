@@ -90,6 +90,18 @@ pub fn build_em4305_wipe() -> &'static str {
     "lf em 4x05 wipe"
 }
 
+/// Query EM4305 chip info to verify it's present before wiping.
+/// Returns output that can be parsed by `output_parser::parse_em4305_info()`.
+pub fn build_em4305_info() -> &'static str {
+    "lf em 4x05 info"
+}
+
+/// Read a specific word from an EM4305 chip.
+/// Used after wipe to verify word 0 is zeroed (wipe verification).
+pub fn build_em4305_read_word(word: u8) -> String {
+    format!("lf em 4x05 read -a {}", word)
+}
+
 /// Append `--em` flag to a base clone command for EM4305 blanks.
 pub fn build_clone_for_em4305(base_cmd: &str) -> String {
     format!("{} --em", base_cmd)

@@ -293,8 +293,8 @@ async fn write_t5577_flow(
     })
 }
 
-/// EM4305 write flow — skips T5577-specific steps (detect/chk/wipe).
-/// Uses `lf em 4x05 wipe` and appends `--em` flag to clone.
+/// EM4305 write flow with detect + wipe-verify safety checks:
+/// 1. detect EM4305 -> 2. wipe -> 3. verify wipe -> 4. clone with --em -> 5. done
 async fn write_em4305_flow(
     app: &AppHandle,
     port: &str,
@@ -303,13 +303,55 @@ async fn write_em4305_flow(
     decoded: &std::collections::HashMap<String, String>,
     machine: &State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
-    // Step 1: Wipe EM4305
-    update_progress(app, machine, 0.2, Some(0), Some(3))?;
+    // Step 1: Detect EM4305 — verify the blank chip is present before wiping.
+    // Mirrors the T5577 detect step to prevent wiping air / wrong chip.
+    update_progress(app, machine, 0.1, Some(0), Some(5))?;
+
+    let info_out =
+        connection::run_command(app, port, command_builder::build_em4305_info()).await?;
+
+    if !output_parser::parse_em4305_info(&info_out) {
+        return report_error(
+            machine,
+            "EM4305 not detected on writer",
+            "No EM4305 blank found. Place blank card on the reader.",
+            true,
+            Some(RecoveryAction::Retry),
+        );
+    }
+
+    // Step 2: Wipe EM4305
+    update_progress(app, machine, 0.3, Some(1), Some(5))?;
 
     connection::run_command(app, port, command_builder::build_em4305_wipe()).await?;
 
-    // Step 2: Clone with --em flag
-    update_progress(app, machine, 0.5, Some(1), Some(3))?;
+    // Step 3: Verify wipe — read word 0 and check it's zeroed.
+    // PM3 can return exit code 0 even when wipe fails silently.
+    // Proceeding to clone without this check risks corrupted data on the card.
+    update_progress(app, machine, 0.5, Some(2), Some(5))?;
+
+    let verify_out =
+        connection::run_command(app, port, &command_builder::build_em4305_read_word(0)).await?;
+    if let Some(word0) = output_parser::parse_em4305_word0(&verify_out) {
+        if word0 != "00000000" {
+            return report_error(
+                machine,
+                &format!(
+                    "EM4305 wipe verification failed — word 0 is {} (expected 00000000)",
+                    word0
+                ),
+                "Wipe verification failed. The card may not have been wiped correctly. \
+                 Do not remove the card — try again or use a different blank.",
+                true,
+                Some(RecoveryAction::Retry),
+            );
+        }
+    }
+    // If parse_em4305_word0 returns None, we can't verify — proceed with caution.
+    // This is acceptable: the clone step will fail if the card is in a bad state.
+
+    // Step 4: Clone with --em flag
+    update_progress(app, machine, 0.7, Some(3), Some(5))?;
 
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
     match base_clone_cmd {
@@ -341,8 +383,8 @@ async fn write_em4305_flow(
         }
     }
 
-    // Step 3: Done -> Verifying
-    update_progress(app, machine, 1.0, Some(2), Some(3))?;
+    // Step 5: Done -> Verifying
+    update_progress(app, machine, 1.0, Some(4), Some(5))?;
     {
         let mut m = machine.lock().map_err(|e| {
             AppError::CommandFailed(format!("State lock poisoned: {}", e))

@@ -1122,6 +1122,36 @@ pub fn verify_match_detailed(
 }
 
 // ---------------------------------------------------------------------------
+// EM4305 detection and verification
+// ---------------------------------------------------------------------------
+
+/// Parse `lf em 4x05 info` output. Returns true if an EM4305 chip was detected.
+/// The PM3 output contains "[+] EM4x05/EM4x69" or similar chip identification lines.
+pub fn parse_em4305_info(output: &str) -> bool {
+    let clean = strip_ansi(output);
+    // PM3 Iceman fork outputs "[+] EM4x05/EM4x69" or "Chip type: EM4x05" on success
+    clean.contains("EM4x05")
+        || clean.contains("EM4x69")
+        || clean.contains("EM4305")
+        || clean.contains("EM4469")
+}
+
+/// Parse `lf em 4x05 read -a 0` output to extract word 0 hex value.
+/// Returns the hex string of word 0 (e.g., "00000000") or None if parse failed.
+/// Used to verify wipe succeeded: word 0 should be all zeros after a successful wipe.
+pub fn parse_em4305_word0(output: &str) -> Option<String> {
+    static EM4305_WORD_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)(?:Word|Address)\s*0+\s*[:|]\s*([0-9A-Fa-f]{8})")
+            .expect("bad em4305 word regex")
+    });
+
+    let clean = strip_ansi(output);
+    EM4305_WORD_RE
+        .captures(&clean)
+        .map(|c| c[1].to_uppercase())
+}
+
+// ---------------------------------------------------------------------------
 // Utility
 // ---------------------------------------------------------------------------
 
