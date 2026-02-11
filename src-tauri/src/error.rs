@@ -7,10 +7,6 @@ pub enum AppError {
     DeviceNotFound,
     #[error("PM3 command failed: {0}")]
     CommandFailed(String),
-    #[error("No card detected")]
-    NoCardFound,
-    #[error("Write failed: {0}")]
-    WriteFailed(String),
     #[error("Database error: {0}")]
     DatabaseError(String),
     #[error("Invalid state transition: {0}")]

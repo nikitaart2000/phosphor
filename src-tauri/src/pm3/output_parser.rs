@@ -882,12 +882,6 @@ fn parse_noralsy(clean: &str) -> Option<(CardType, CardData)> {
 // T5577 detection
 // ---------------------------------------------------------------------------
 
-/// Parse `lf search` output to check if a T5577 blank is present.
-pub fn is_t5577_detected(output: &str) -> bool {
-    let clean = strip_ansi(output);
-    clean.contains("T55xx") || clean.contains("T5577") || clean.contains("T5555")
-}
-
 /// Parse `lf t55xx detect` output for password status and chip info.
 pub fn parse_t5577_detect(output: &str) -> T5577Status {
     let clean = strip_ansi(output);

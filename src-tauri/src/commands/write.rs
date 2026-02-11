@@ -41,6 +41,13 @@ pub async fn write_clone_with_data(
     blank_type: Option<BlankType>,
     machine: State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
+    // Guard: reject absurdly large decoded maps (prevents DoS via oversized IPC payload)
+    if decoded.len() > 50 {
+        return Err(AppError::CommandFailed(
+            "Too many decoded fields".into(),
+        ));
+    }
+
     let blank = blank_type.unwrap_or_else(|| card_type.recommended_blank());
 
     // Transition: BlankDetected -> Writing

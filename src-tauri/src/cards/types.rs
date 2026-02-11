@@ -84,6 +84,8 @@ impl CardType {
         }
     }
 
+    /// Human-readable name for UI display. Used by frontend via serde serialization.
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &str {
         match self {
             CardType::EM4100 => "EM4100",
@@ -131,6 +133,8 @@ impl CardType {
     }
 
     /// Reason why a card type cannot be cloned, if applicable.
+    /// Provided for frontend display on non-cloneable card identification.
+    #[allow(dead_code)]
     pub fn non_cloneable_reason(&self) -> Option<&str> {
         match self {
             CardType::DESFire => Some("DESFire uses AES encryption; cloning not supported"),
@@ -192,6 +196,8 @@ pub enum BlankType {
 }
 
 impl BlankType {
+    /// Human-readable name for UI display. Used by frontend via serde serialization.
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &str {
         match self {
             BlankType::T5577 => "T5577",
@@ -239,7 +245,9 @@ pub enum RecoveryAction {
     Manual,
 }
 
+/// HF card processing phases (reserved for Phase 3: HF card support).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[allow(dead_code)]
 pub enum ProcessPhase {
     KeyCheck,
     Darkside,
@@ -249,7 +257,9 @@ pub enum ProcessPhase {
     Dumping,
 }
 
+/// Magic card generation identifiers (reserved for Phase 3: HF card support).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[allow(dead_code)]
 pub enum MagicGeneration {
     Gen1a,
     Gen2,

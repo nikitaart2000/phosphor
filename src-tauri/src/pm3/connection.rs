@@ -23,6 +23,19 @@ static PORT_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Run a single PM3 command: spawns `proxmark3 -p {port} -f -c "{cmd}"`,
 /// waits for the process to exit (with a 30-second timeout), then returns cleaned stdout.
 /// If the subprocess hangs (e.g., USB cable pulled), it will be killed after the timeout.
+///
+/// **Known limitation — subprocess cancellation on reset:**
+/// This function uses `tauri_plugin_shell`'s `.output()` which internally spawns a child
+/// process and collects stdout/stderr until exit. Because the child handle is owned by the
+/// shell plugin's future and not exposed to callers, we cannot kill the subprocess from
+/// outside (e.g., when the user presses Reset during a write operation). Refactoring to
+/// `spawn()` + async stream reading would be needed for true cancellation support.
+///
+/// In practice this is acceptable because:
+/// - T5577/EM4305 LF writes complete in under 2 seconds.
+/// - The 30-second timeout (`PM3_COMMAND_TIMEOUT`) already protects against hangs.
+/// - When the Tauri future is dropped (timeout or app shutdown), the shell plugin
+///   cleans up the child process.
 pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<String, AppError> {
     // Validate port format to prevent command injection via subprocess args
     if !PORT_RE.is_match(port) {
