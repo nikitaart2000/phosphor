@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use regex::Regex;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 use tokio::time::timeout;
 
@@ -83,7 +83,14 @@ pub async fn run_command(app: &AppHandle, port: &str, cmd: &str) -> Result<Strin
         ));
     }
 
-    // Try PATH-based lookup first, then fall back to common install locations.
+    // 1) Try bundled sidecar binary first (available in production builds).
+    //    In dev mode the sidecar won't exist, so this silently falls through.
+    match try_sidecar(app, port, cmd).await {
+        Ok(output) => return Ok(output),
+        Err(_) => { /* sidecar not available — fall through to PATH/scope lookup */ }
+    }
+
+    // 2) Fall back to PATH-based lookup, then common install locations.
     // Each scope name maps to a binary path registered in capabilities/default.json.
     let scope_names = pm3_scope_names();
     let mut first_spawn_error: Option<AppError> = None;
@@ -212,6 +219,74 @@ fn build_port_candidates() -> Vec<String> {
     }
 
     ports
+}
+
+/// Attempt to run a PM3 command via the bundled sidecar binary.
+/// Returns Ok(stdout) on success, Err on any failure (sidecar not found, spawn
+/// error, non-zero exit code). Callers should fall through to PATH-based lookup
+/// on failure.
+///
+/// The sidecar binary depends on DLLs bundled in `pm3-libs/` (Qt5, ICU, etc.).
+/// We prepend the DLL directory to PATH so the OS can find them at load time.
+async fn try_sidecar(app: &AppHandle, port: &str, cmd: &str) -> Result<String, AppError> {
+    // Resolve the resource directory where pm3-libs/ DLLs are bundled.
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| AppError::CommandFailed(format!("Cannot resolve resource dir: {}", e)))?;
+    let dll_dir = resource_dir.join("pm3-libs");
+    let system_path = std::env::var("PATH").unwrap_or_default();
+    let new_path = format!("{};{}", dll_dir.display(), system_path);
+
+    let sidecar = app
+        .shell()
+        .sidecar("binaries/proxmark3")
+        .map_err(|e| AppError::CommandFailed(format!("Sidecar not available: {}", e)))?;
+
+    let output_future = sidecar
+        .env("PATH", &new_path)
+        .args(["-p", port, "-f", "-c", cmd])
+        .output();
+
+    let output = match timeout(PM3_COMMAND_TIMEOUT, output_future).await {
+        Err(_) => {
+            return Err(AppError::Timeout(format!(
+                "PM3 command timed out after {}s: {}",
+                PM3_COMMAND_TIMEOUT.as_secs(),
+                cmd
+            )));
+        }
+        Ok(Err(e)) => {
+            return Err(AppError::CommandFailed(format!(
+                "Failed to run sidecar: {}",
+                e
+            )));
+        }
+        Ok(Ok(output)) => output,
+    };
+
+    let code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    match code {
+        0 => Ok(strip_ansi(&stdout)),
+        -5 | 251 => Err(AppError::Timeout(format!(
+            "PM3 timed out running: {}",
+            cmd
+        ))),
+        _ => {
+            let detail = if stderr.is_empty() {
+                strip_ansi(&stdout)
+            } else {
+                strip_ansi(&stderr)
+            };
+            Err(AppError::CommandFailed(format!(
+                "Exit code {}: {}",
+                code, detail
+            )))
+        }
+    }
 }
 
 fn parse_hw_version(output: &str) -> Option<(String, String)> {

@@ -28,6 +28,10 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "externalBin": ["binaries/proxmark3"],
+    "resources": {
+      "pm3-libs/*": "pm3-libs/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

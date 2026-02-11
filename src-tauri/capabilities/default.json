@@ -10,11 +10,22 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
+          "name": "binaries/proxmark3",
+          "sidecar": true,
+          "args": [
+            { "validator": "^-p$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^-f$" },
+            { "validator": "^-c$" },
+            { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
+          ]
+        },
+        {
           "name": "proxmark3",
           "cmd": "proxmark3",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
@@ -25,7 +36,7 @@
           "cmd": "C:\\proxmark3\\proxmark3.exe",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
@@ -36,7 +47,7 @@
           "cmd": "C:\\Program Files\\proxmark3\\proxmark3.exe",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
@@ -47,7 +58,7 @@
           "cmd": "/usr/local/bin/proxmark3",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
@@ -58,7 +69,7 @@
           "cmd": "/opt/homebrew/bin/proxmark3",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
@@ -69,7 +80,7 @@
           "cmd": "/usr/local/bin/proxmark3",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }
@@ -80,7 +91,7 @@
           "cmd": "/usr/bin/proxmark3",
           "args": [
             { "validator": "^-p$" },
-            { "validator": "^(COM[1-9]\\d?|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
+            { "validator": "^(COM[1-9]\\d*|/dev/tty\\.(usbmodem|usbserial)[A-Za-z0-9]+|/dev/tty(ACM|USB)\\d{1,2})$" },
             { "validator": "^-f$" },
             { "validator": "^-c$" },
             { "validator": "^[a-zA-Z0-9 _.:\\-]{1,500}$" }

@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Sidecar binaries + DLLs (GPL — download from Iceman fork releases)
+src-tauri/binaries/*.exe
+src-tauri/pm3-libs/
+
 # Claude
 CLAUDE.md
 .claude/
