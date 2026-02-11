@@ -20,9 +20,9 @@ export function WizardContainer() {
         return (
           <ScanStep
             device={{
-              model: wizard.context.model!,
-              port: wizard.context.port!,
-              firmware: wizard.context.firmware!,
+              model: wizard.context.model ?? 'Unknown',
+              port: wizard.context.port ?? '',
+              firmware: wizard.context.firmware ?? 'Unknown',
             }}
             onScanned={wizard.scan}
             isLoading={false}
@@ -32,9 +32,9 @@ export function WizardContainer() {
         return (
           <ScanStep
             device={{
-              model: wizard.context.model!,
-              port: wizard.context.port!,
-              firmware: wizard.context.firmware!,
+              model: wizard.context.model ?? 'Unknown',
+              port: wizard.context.port ?? '',
+              firmware: wizard.context.firmware ?? 'Unknown',
             }}
             onScanned={wizard.scan}
             isLoading={true}
@@ -44,9 +44,9 @@ export function WizardContainer() {
         return (
           <ScanStep
             device={{
-              model: wizard.context.model!,
-              port: wizard.context.port!,
-              firmware: wizard.context.firmware!,
+              model: wizard.context.model ?? 'Unknown',
+              port: wizard.context.port ?? '',
+              firmware: wizard.context.firmware ?? 'Unknown',
             }}
             cardData={wizard.context.cardData}
             cardType={wizard.context.cardType}

@@ -124,7 +124,11 @@ export function VerifyStep({ onContinue, onRetryWrite, onReset, isLoading, succe
                   )}
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div style={{ color: 'var(--green-dim)' }}>
+                [~] Waiting for verification result...
+              </div>
+            )}
           </div>
         )}
       </div>

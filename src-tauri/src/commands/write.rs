@@ -19,21 +19,10 @@ const EM4305_TOTAL_STEPS: u16 = 5;
 #[tauri::command]
 pub async fn write_clone(
     _app: AppHandle,
-    machine: State<'_, Mutex<WizardMachine>>,
+    _machine: State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
-    let m = machine.lock().map_err(|e| {
-        AppError::CommandFailed(format!("State lock poisoned: {}", e))
-    })?;
-    match &m.current {
-        WizardState::BlankDetected { .. } => {}
-        _ => {
-            return Err(AppError::InvalidTransition(
-                "Must be in BlankDetected to write".to_string(),
-            ));
-        }
-    }
     Err(AppError::CommandFailed(
-        "Use write_clone_with_data and pass card_type, uid, decoded, port, blank_type".to_string(),
+        "write_clone is deprecated: use write_clone_with_data instead".into(),
     ))
 }
 
@@ -410,6 +399,9 @@ async fn write_em4305_flow(
 
 /// Verify the clone by reading the written card and comparing fields.
 /// Uses type-specific reader commands for more accurate verification.
+///
+/// `blank_type` is reserved for Phase 3 HF card verification where the blank
+/// type determines the verification command. Currently unused for LF cards.
 #[tauri::command]
 pub async fn verify_clone(
     app: AppHandle,

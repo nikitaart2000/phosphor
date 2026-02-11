@@ -12,6 +12,12 @@ import type {
 } from './types';
 import * as api from '../lib/api';
 
+// Strip system file paths from error messages shown to users.
+// Matches Windows (C:\...) and Unix (/home/..., /Users/...) paths.
+function stripSystemPaths(msg: string): string {
+  return msg.replace(/[A-Z]:\\[\w\\.-]+/gi, '[path]').replace(/\/(?:home|Users|tmp|var)\/[\w/.-]+/g, '[path]');
+}
+
 // Helper: safely extract a string message from an unknown error value.
 // Prevents `[object Object]` from structured error payloads.
 function extractErrorMessage(e: unknown): string {
@@ -102,6 +108,8 @@ export type WizardEvent =
   | { type: 'WRITE_COMPLETE' }
   | { type: 'VERIFY_RESULT'; success: boolean; mismatchedBlocks: number[] }
   | { type: 'FINISH' }
+  // ERROR is handled via invoke onError handlers, not dispatched directly.
+  // Kept in the union for type completeness and potential future manual error injection.
   | { type: 'ERROR'; message: string; userMessage: string; recoverable: boolean; recoveryAction: RecoveryAction | null }
   | { type: 'RETRY' }
   | { type: 'RESET' };
@@ -196,7 +204,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => extractErrorMessage(event.error),
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
             errorUserMessage: () => 'Could not detect a Proxmark3 device. Check the USB connection and try again.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
@@ -281,7 +289,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => extractErrorMessage(event.error),
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
             errorUserMessage: () => 'Card scan failed. Check device connection.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -338,7 +346,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => extractErrorMessage(event.error),
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
             errorUserMessage: () => 'Failed to detect blank card.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -403,7 +411,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => extractErrorMessage(event.error),
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
             errorUserMessage: () => 'Write operation failed. Do not remove the card.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,
@@ -458,7 +466,7 @@ export const wizardMachine = setup({
         onError: {
           target: 'error',
           actions: assign({
-            errorMessage: ({ event }) => extractErrorMessage(event.error),
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
             errorUserMessage: () => 'Verification failed.',
             errorRecoverable: () => true,
             errorRecoveryAction: () => 'Retry' as RecoveryAction,

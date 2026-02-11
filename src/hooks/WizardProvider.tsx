@@ -145,34 +145,36 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     [send, reset],
   );
   const finish = useCallback(async () => {
+    // Capture context values before any await to avoid stale closure
+    const { cardType, cardData, blankType, port, verifySuccess } = state.context;
+
     // Sync Rust FSM: VerificationComplete → Complete
-    const ctx = state.context;
     try {
-      if (ctx.cardType && ctx.cardData) {
+      if (cardType && cardData) {
         await api.markComplete(
           {
-            card_type: ctx.cardType,
-            uid: ctx.cardData.uid,
-            display_name: ctx.cardType,
+            card_type: cardType,
+            uid: cardData.uid,
+            display_name: cardType,
           },
           {
-            card_type: ctx.blankType ?? 'T5577',
-            uid: ctx.cardData.uid,
-            display_name: ctx.blankType ?? 'T5577',
+            card_type: blankType ?? 'T5577',
+            uid: cardData.uid,
+            display_name: blankType ?? 'T5577',
           },
         );
       }
       send({ type: 'FINISH' });
       // Save clone record to history after successful verification
-      if (ctx.verifySuccess && ctx.cardType && ctx.cardData && ctx.port) {
+      if (verifySuccess && cardType && cardData && port) {
         try {
           await api.saveCloneRecord({
             id: null,
-            source_type: ctx.cardType,
-            source_uid: ctx.cardData.uid,
-            target_type: ctx.blankType ?? 'T5577',
-            target_uid: ctx.cardData.uid,
-            port: ctx.port,
+            source_type: cardType,
+            source_uid: cardData.uid,
+            target_type: blankType ?? 'T5577',
+            target_uid: cardData.uid,
+            port: port,
             success: true,
             timestamp: new Date().toISOString(),
             notes: null,

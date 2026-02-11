@@ -1207,8 +1207,8 @@ pub fn parse_t5577_chk(output: &str) -> Option<String> {
 
 /// Parse verification output: compare two UID strings.
 pub fn verify_match(source_uid: &str, clone_output: &str) -> (bool, Vec<u16>) {
-    let clean = strip_ansi(clone_output);
-    if let Some((_, card_data)) = parse_lf_search(&clean) {
+    // Note: no strip_ansi here — parse_lf_search already strips ANSI internally.
+    if let Some((_, card_data)) = parse_lf_search(clone_output) {
         let matches = card_data.uid.eq_ignore_ascii_case(source_uid);
         if matches {
             (true, vec![])
@@ -1227,9 +1227,8 @@ pub fn verify_match_detailed(
     source_decoded: &HashMap<String, String>,
     clone_output: &str,
 ) -> (bool, Vec<u16>) {
-    let clean = strip_ansi(clone_output);
-
-    if let Some((detected_type, clone_data)) = parse_lf_search(&clean) {
+    // Note: no strip_ansi here — parse_lf_search already strips ANSI internally.
+    if let Some((detected_type, clone_data)) = parse_lf_search(clone_output) {
         // Type must match
         if *source_type != detected_type {
             return (false, vec![0]);

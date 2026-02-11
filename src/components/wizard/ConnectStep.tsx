@@ -5,10 +5,9 @@ import { useSfx } from '../../hooks/useSfx';
 interface ConnectStepProps {
   onConnected: () => void;
   isLoading?: boolean;
-  device?: { model: string; port: string; firmware: string };
 }
 
-export function ConnectStep({ onConnected, isLoading, device }: ConnectStepProps) {
+export function ConnectStep({ onConnected, isLoading }: ConnectStepProps) {
   const sfx = useSfx();
   const [dots, setDots] = useState('');
 
@@ -27,48 +26,7 @@ export function ConnectStep({ onConnected, isLoading, device }: ConnectStepProps
         <div style={{ color: 'var(--amber)', fontSize: '14px' }}>
           DETECTING DEVICE{dots}
         </div>
-      ) : device ? (
-        <div style={{ fontSize: '13px', lineHeight: '1.8' }}>
-          <div style={{ color: 'var(--green-mid)' }}>
-            [+] Device found
-          </div>
-          <div style={{ color: 'var(--green-dim)', marginTop: '8px' }}>
-            MODEL : {device.model}
-          </div>
-          <div style={{ color: 'var(--green-dim)' }}>
-            PORT  : {device.port}
-          </div>
-          <div style={{ color: 'var(--green-dim)' }}>
-            FW    : {device.firmware}
-          </div>
-          <div style={{ marginTop: '16px' }}>
-            <button
-              onClick={() => { sfx.action(); onConnected(); }}
-              style={{
-                background: 'var(--bg-void)',
-                color: 'var(--green-bright)',
-                border: '2px solid var(--green-bright)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '14px',
-                fontWeight: 600,
-                padding: '8px 24px',
-                cursor: 'pointer',
-                textTransform: 'uppercase',
-              }}
-              onMouseEnter={(e) => {
-                sfx.hover();
-                e.currentTarget.style.background = 'var(--green-ghost)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--bg-void)';
-              }}
-            >
-              SCAN
-            </button>
-          </div>
-        </div>
       ) : (
-        // Idle state: show connect button
         <div style={{ fontSize: '13px', lineHeight: '1.8' }}>
           <div style={{ color: 'var(--green-dim)', marginBottom: '12px' }}>
             No device detected. Connect a Proxmark3 and press CONNECT.
