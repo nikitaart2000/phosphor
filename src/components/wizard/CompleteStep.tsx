@@ -4,19 +4,24 @@ import type { CardType, CardData } from '../../machines/types';
 
 interface CompleteStepProps {
   onReset: () => void;
+  onDisconnect?: () => void;
   cardType?: CardType | null;
   cardData?: CardData | null;
   timestamp?: string | null;
 }
 
-export function CompleteStep({ onReset, cardType, cardData, timestamp }: CompleteStepProps) {
+export function CompleteStep({ onReset, onDisconnect, cardType, cardData, timestamp }: CompleteStepProps) {
   const sfx = useSfx();
 
   const displayType = cardType || 'Unknown';
   const displayUid = cardData?.uid || 'N/A';
-  const displayTime = timestamp
-    ? timestamp.replace('T', ' ').slice(0, 19)
-    : new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const displayTime = (() => {
+    const iso = timestamp || new Date().toISOString();
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso.replace('T', ' ').slice(0, 19);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  })();
 
   return (
     <TerminalPanel title="COMPLETE">
@@ -38,7 +43,7 @@ export function CompleteStep({ onReset, cardType, cardData, timestamp }: Complet
           STATUS : VERIFIED
         </div>
 
-        <div style={{ marginTop: '20px' }}>
+        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button
             onClick={() => { sfx.action(); onReset(); }}
             style={{
@@ -61,6 +66,27 @@ export function CompleteStep({ onReset, cardType, cardData, timestamp }: Complet
           >
             CLONE ANOTHER
           </button>
+          {onDisconnect && (
+            <span
+              onClick={() => { sfx.action(); onDisconnect(); }}
+              style={{
+                color: 'var(--green-dim)',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                userSelect: 'none',
+              }}
+              onMouseEnter={(e) => {
+                sfx.hover();
+                e.currentTarget.style.color = 'var(--green-bright)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--green-dim)';
+              }}
+            >
+              [DISCONNECT]
+            </span>
+          )}
         </div>
       </div>
     </TerminalPanel>

@@ -9,6 +9,7 @@ import type {
   CardData,
   RecoveryAction,
   WizardState,
+  FirmwareCheckResult,
 } from './types';
 import * as api from '../lib/api';
 
@@ -48,6 +49,7 @@ export interface WizardContext {
   expectedBlank: BlankType | null;
   blankType: BlankType | null;
   readyToWrite: boolean;
+  blankExistingData: string | null;
 
   // Write progress
   writeProgress: number;
@@ -67,6 +69,22 @@ export interface WizardContext {
   errorRecoverable: boolean;
   errorRecoveryAction: RecoveryAction | null;
   errorSource: 'scan' | 'write' | 'detect' | 'verify' | 'blank' | null;
+
+  // Firmware
+  firmwareStatus: 'unknown' | 'matched' | 'mismatched' | 'updating' | 'updated';
+  clientVersion: string | null;
+  deviceFirmwareVersion: string | null;
+  hardwareVariant: 'rdv4' | 'rdv4-bt' | 'generic' | 'generic-256' | 'unknown' | null;
+  firmwarePathExists: boolean;
+  firmwareProgress: number;
+  firmwareMessage: string | null;
+
+  // HF processing (autopwn / dump)
+  hfPhase: string | null;
+  hfKeysFound: number;
+  hfKeysTotal: number;
+  hfElapsed: number;
+  hfDumpInfo: string | null;
 }
 
 const initialContext: WizardContext = {
@@ -81,6 +99,7 @@ const initialContext: WizardContext = {
   expectedBlank: null,
   blankType: null,
   readyToWrite: false,
+  blankExistingData: null,
   writeProgress: 0,
   currentBlock: null,
   totalBlocks: null,
@@ -92,6 +111,47 @@ const initialContext: WizardContext = {
   errorRecoverable: false,
   errorRecoveryAction: null,
   errorSource: null,
+  firmwareStatus: 'unknown',
+  clientVersion: null,
+  deviceFirmwareVersion: null,
+  hardwareVariant: null,
+  firmwarePathExists: true,
+  firmwareProgress: 0,
+  firmwareMessage: null,
+  hfPhase: null,
+  hfKeysFound: 0,
+  hfKeysTotal: 0,
+  hfElapsed: 0,
+  hfDumpInfo: null,
+};
+
+// Fields to clear on soft reset (keeps device info: port/model/firmware + firmware fields)
+const clearCardFields: Partial<WizardContext> = {
+  frequency: null,
+  cardType: null,
+  cardData: null,
+  cloneable: false,
+  recommendedBlank: null,
+  expectedBlank: null,
+  blankType: null,
+  readyToWrite: false,
+  blankExistingData: null,
+  writeProgress: 0,
+  currentBlock: null,
+  totalBlocks: null,
+  verifySuccess: null,
+  mismatchedBlocks: [],
+  completionTimestamp: null,
+  errorMessage: null,
+  errorUserMessage: null,
+  errorRecoverable: false,
+  errorRecoveryAction: null,
+  errorSource: null,
+  hfPhase: null,
+  hfKeysFound: 0,
+  hfKeysTotal: 0,
+  hfElapsed: 0,
+  hfDumpInfo: null,
 };
 
 // -- Events --
@@ -111,8 +171,24 @@ export type WizardEvent =
   // ERROR is handled via invoke onError handlers, not dispatched directly.
   // Kept in the union for type completeness and potential future manual error injection.
   | { type: 'ERROR'; message: string; userMessage: string; recoverable: boolean; recoveryAction: RecoveryAction | null }
+  | { type: 'SELECT_VARIANT'; variant: 'rdv4' | 'rdv4-bt' | 'generic' }
+  | { type: 'UPDATE_FIRMWARE' }
+  | { type: 'SKIP_FIRMWARE' }
+  | { type: 'FIRMWARE_PROGRESS'; progress: number; message: string; phase: string }
+  | { type: 'FIRMWARE_COMPLETE' }
+  | { type: 'FIRMWARE_FAILED'; message: string }
+  | { type: 'CANCEL_FIRMWARE' }
   | { type: 'RETRY' }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  | { type: 'BACK_TO_SCAN' }
+  | { type: 'SOFT_RESET' }
+  | { type: 'DISCONNECT' }
+  | { type: 'LOAD_SAVED_CARD'; frequency: Frequency; cardType: CardType; cardData: CardData; cloneable: boolean; recommendedBlank: BlankType }
+  | { type: 'RE_DETECT_BLANK' }
+  | { type: 'START_HF_PROCESS' }
+  | { type: 'HF_PROGRESS'; phase: string; keysFound: number; keysTotal: number; elapsed: number }
+  | { type: 'HF_COMPLETE'; dumpInfo: string }
+  | { type: 'CANCEL_HF' };
 
 // -- Machine definition --
 
@@ -136,6 +212,14 @@ export const wizardMachine = setup({
       if (!input.port) throw new Error('No device port available');
       if (!input.cardType) throw new Error('No card type identified');
       if (!input.cardData) throw new Error('No card data available');
+      // HF cards use dedicated hfWriteClone (dump-based, blank-type-specific workflow)
+      if (input.frequency === 'HF') {
+        return api.hfWriteClone(
+          input.cardData.uid,
+          input.cardType,
+          input.blankType ?? input.recommendedBlank ?? 'MagicMifareGen1a',
+        );
+      }
       return api.writeCloneWithData(
         input.port,
         input.cardType,
@@ -148,6 +232,14 @@ export const wizardMachine = setup({
       if (!input.port) throw new Error('No device port available');
       if (!input.cardType) throw new Error('No card type identified');
       if (!input.cardData) throw new Error('No card data available');
+      // HF cards use dedicated hfVerifyClone (UID match + dump comparison)
+      if (input.frequency === 'HF') {
+        return api.hfVerifyClone(
+          input.cardData.uid,
+          input.cardType,
+          input.blankType ?? input.recommendedBlank ?? 'MagicMifareGen1a',
+        );
+      }
       return api.verifyCloneWithData(
         input.port,
         input.cardData.uid,
@@ -155,6 +247,18 @@ export const wizardMachine = setup({
         input.cardData.decoded,
         input.blankType ?? undefined,
       );
+    }),
+    // HF: autopwn (Classic) or simple dump (UL/NTAG/iCLASS)
+    runHfProcess: fromPromise<WizardState, WizardContext>(async ({ input }) => {
+      if (!input.cardType) throw new Error('No card type identified');
+      if (input.cardType === 'MifareClassic1K' || input.cardType === 'MifareClassic4K') {
+        return api.hfAutopwn();
+      }
+      return api.hfDump();
+    }),
+    checkFirmware: fromPromise<FirmwareCheckResult, WizardContext>(async ({ input }) => {
+      if (!input.port) throw new Error('No device port available');
+      return api.checkFirmwareVersion(input.port);
     }),
   },
 }).createMachine({
@@ -175,7 +279,7 @@ export const wizardMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output.step === 'DeviceConnected',
-            target: 'deviceConnected',
+            target: 'checkingFirmware',
             actions: assign({
               port: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.port : null,
               model: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.model : null,
@@ -214,9 +318,184 @@ export const wizardMachine = setup({
       },
     },
 
+    checkingFirmware: {
+      invoke: {
+        src: 'checkFirmware',
+        input: ({ context }: { context: WizardContext }) => context,
+        onDone: [
+          {
+            guard: ({ event }) => event.output.matched,
+            target: 'deviceConnected',
+            actions: assign({
+              firmwareStatus: () => 'matched' as const,
+              clientVersion: ({ event }) => event.output.clientVersion,
+              deviceFirmwareVersion: ({ event }) => event.output.deviceFirmwareVersion,
+              hardwareVariant: ({ event }) => event.output.hardwareVariant,
+              firmwarePathExists: ({ event }) => event.output.firmwarePathExists,
+            }),
+          },
+          {
+            target: 'firmwareOutdated',
+            actions: assign({
+              firmwareStatus: () => 'mismatched' as const,
+              clientVersion: ({ event }) => event.output.clientVersion,
+              deviceFirmwareVersion: ({ event }) => event.output.deviceFirmwareVersion,
+              hardwareVariant: ({ event }) => event.output.hardwareVariant,
+              firmwarePathExists: ({ event }) => event.output.firmwarePathExists,
+            }),
+          },
+        ],
+        onError: {
+          // Firmware check failed — non-blocking, proceed to scan
+          target: 'deviceConnected',
+          actions: assign({
+            firmwareStatus: () => 'unknown' as const,
+          }),
+        },
+      },
+      on: {
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
+    },
+
+    firmwareOutdated: {
+      on: {
+        SELECT_VARIANT: {
+          actions: assign({
+            hardwareVariant: ({ event }) => event.variant,
+            firmwarePathExists: () => true,
+          }),
+        },
+        UPDATE_FIRMWARE: {
+          target: 'updatingFirmware',
+          actions: assign({
+            firmwareStatus: () => 'updating' as const,
+            firmwareProgress: () => 0,
+            firmwareMessage: () => null,
+          }),
+        },
+        SKIP_FIRMWARE: { target: 'deviceConnected' },
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
+    },
+
+    updatingFirmware: {
+      after: {
+        300000: {
+          target: 'error',
+          actions: assign({
+            errorMessage: () => 'Firmware flash timed out after 5 minutes',
+            errorUserMessage: () => 'Firmware flash timed out. The device may need to be reconnected.',
+            errorRecoverable: () => true,
+            errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
+            errorSource: () => 'detect' as const,
+          }),
+        },
+      },
+      on: {
+        FIRMWARE_PROGRESS: {
+          actions: assign({
+            firmwareProgress: ({ event }) => event.progress,
+            firmwareMessage: ({ event }) => event.message,
+          }),
+        },
+        FIRMWARE_COMPLETE: {
+          target: 'redetectingDevice',
+          actions: assign({
+            firmwareStatus: () => 'updated' as const,
+            firmwareProgress: () => 100,
+            firmwareMessage: () => 'Firmware updated successfully',
+          }),
+        },
+        FIRMWARE_FAILED: {
+          target: 'error',
+          actions: assign({
+            errorMessage: ({ event }) => event.message,
+            errorUserMessage: ({ event }) => event.message,
+            errorRecoverable: () => true,
+            errorRecoveryAction: () => 'Retry' as RecoveryAction,
+            errorSource: () => 'detect' as const,
+          }),
+        },
+        CANCEL_FIRMWARE: {
+          target: 'firmwareOutdated',
+          actions: assign({
+            firmwareProgress: () => 0,
+            firmwareMessage: () => null,
+            firmwareStatus: () => 'mismatched' as const,
+          }),
+        },
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
+    },
+
+    redetectingDevice: {
+      after: {
+        15000: {
+          target: 'error',
+          actions: assign({
+            errorMessage: () => 'Device redetection timed out',
+            errorUserMessage: () => 'Device not found after firmware update. Unplug and replug the USB cable, then try again.',
+            errorRecoverable: () => true,
+            errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
+            errorSource: () => 'detect' as const,
+          }),
+        },
+      },
+      invoke: {
+        src: 'detectDevice',
+        onDone: [
+          {
+            guard: ({ event }) => event.output.step === 'DeviceConnected',
+            target: 'deviceConnected',
+            actions: assign({
+              port: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.port : null,
+              model: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.model : null,
+              firmware: ({ event }) => event.output.step === 'DeviceConnected' ? event.output.data.firmware : null,
+              firmwareStatus: () => 'matched' as const,
+            }),
+          },
+          {
+            target: 'error',
+            actions: assign({
+              errorMessage: () => 'Device not found after firmware update',
+              errorUserMessage: () => 'Device not found after firmware update. Unplug and replug the USB cable, then try again.',
+              errorRecoverable: () => true,
+              errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
+              errorSource: () => 'detect' as const,
+            }),
+          },
+        ],
+        onError: {
+          target: 'error',
+          actions: assign({
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
+            errorUserMessage: () => 'Device not found after firmware update. Unplug and replug the USB cable.',
+            errorRecoverable: () => true,
+            errorRecoveryAction: () => 'Reconnect' as RecoveryAction,
+            errorSource: () => 'detect' as const,
+          }),
+        },
+      },
+      on: {
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
+    },
+
     deviceConnected: {
       on: {
         SCAN: { target: 'scanningCard' },
+        LOAD_SAVED_CARD: {
+          target: 'cardIdentified',
+          actions: assign({
+            frequency: ({ event }) => event.type === 'LOAD_SAVED_CARD' ? event.frequency : null,
+            cardType: ({ event }) => event.type === 'LOAD_SAVED_CARD' ? event.cardType : null,
+            cardData: ({ event }) => event.type === 'LOAD_SAVED_CARD' ? event.cardData : null,
+            cloneable: ({ event }) => event.type === 'LOAD_SAVED_CARD' ? event.cloneable : false,
+            recommendedBlank: ({ event }) => event.type === 'LOAD_SAVED_CARD' ? event.recommendedBlank : null,
+          }),
+        },
+        DISCONNECT: { target: 'idle', actions: assign(() => initialContext) },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },
@@ -307,6 +586,92 @@ export const wizardMachine = setup({
             expectedBlank: ({ event }) => event.expectedBlank,
           }),
         },
+        START_HF_PROCESS: {
+          target: 'hfProcessing',
+        },
+        BACK_TO_SCAN: {
+          target: 'deviceConnected',
+          actions: assign(() => clearCardFields),
+        },
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
+    },
+
+    hfProcessing: {
+      invoke: {
+        src: 'runHfProcess',
+        input: ({ context }: { context: WizardContext }) => context,
+        onDone: [
+          {
+            guard: ({ event }) => event.output.step === 'HfDumpReady',
+            target: 'hfDumpReady',
+            actions: assign({
+              hfDumpInfo: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'HfDumpReady') return ws.data.dump_info;
+                return null;
+              },
+            }),
+          },
+          {
+            target: 'error',
+            actions: assign({
+              errorMessage: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'Error') return ws.data.message;
+                return 'HF process returned unexpected state';
+              },
+              errorUserMessage: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'Error') return ws.data.user_message;
+                return 'Key recovery failed. Try again.';
+              },
+              errorRecoverable: () => true,
+              errorRecoveryAction: () => 'Retry' as RecoveryAction,
+              errorSource: () => 'scan' as const,
+            }),
+          },
+        ],
+        onError: {
+          target: 'error',
+          actions: assign({
+            errorMessage: ({ event }) => stripSystemPaths(extractErrorMessage(event.error)),
+            errorUserMessage: () => 'HF key recovery or dump failed.',
+            errorRecoverable: () => true,
+            errorRecoveryAction: () => 'Retry' as RecoveryAction,
+            errorSource: () => 'scan' as const,
+          }),
+        },
+      },
+      on: {
+        HF_PROGRESS: {
+          actions: assign({
+            hfPhase: ({ event }) => event.phase,
+            hfKeysFound: ({ event }) => event.keysFound,
+            hfKeysTotal: ({ event }) => event.keysTotal,
+            hfElapsed: ({ event }) => event.elapsed,
+          }),
+        },
+        CANCEL_HF: {
+          target: 'deviceConnected',
+          actions: assign(() => clearCardFields),
+        },
+        RESET: { target: 'idle', actions: assign(() => initialContext) },
+      },
+    },
+
+    hfDumpReady: {
+      on: {
+        SKIP_TO_BLANK: {
+          target: 'waitingForBlank',
+          actions: assign({
+            expectedBlank: ({ event }) => event.expectedBlank,
+          }),
+        },
+        BACK_TO_SCAN: {
+          target: 'deviceConnected',
+          actions: assign(() => clearCardFields),
+        },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },
@@ -329,6 +694,11 @@ export const wizardMachine = setup({
                 const ws = event.output;
                 if (ws.step === 'BlankDetected') return ws.data.ready_to_write;
                 return false;
+              },
+              blankExistingData: ({ event }) => {
+                const ws = event.output;
+                if (ws.step === 'BlankDetected') return ws.data.existing_data_type;
+                return null;
               },
             }),
           },
@@ -364,6 +734,14 @@ export const wizardMachine = setup({
         WRITE: {
           guard: ({ context }) => context.readyToWrite,
           target: 'writing',
+        },
+        RE_DETECT_BLANK: {
+          target: 'waitingForBlank',
+          actions: assign({
+            blankType: () => null,
+            readyToWrite: () => false,
+            blankExistingData: () => null,
+          }),
         },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
@@ -497,6 +875,11 @@ export const wizardMachine = setup({
     complete: {
       on: {
         DETECT: { target: 'detectingDevice', actions: assign(() => initialContext) },
+        SOFT_RESET: {
+          target: 'deviceConnected',
+          actions: assign(() => clearCardFields),
+        },
+        DISCONNECT: { target: 'idle', actions: assign(() => initialContext) },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },
@@ -508,6 +891,11 @@ export const wizardMachine = setup({
           target: 'idle',
           actions: assign(() => initialContext),
         },
+        SOFT_RESET: {
+          target: 'deviceConnected',
+          actions: assign(() => clearCardFields),
+        },
+        DISCONNECT: { target: 'idle', actions: assign(() => initialContext) },
         RESET: { target: 'idle', actions: assign(() => initialContext) },
       },
     },

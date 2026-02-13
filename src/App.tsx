@@ -5,6 +5,8 @@ import { MainLayout } from './components/layout/MainLayout';
 import { MatrixRain } from './components/matrix/MatrixRain';
 import { CrtOverlay } from './components/matrix/CrtOverlay';
 import { WizardProvider } from './hooks/WizardProvider';
+import { SettingsProvider } from './hooks/useSettings';
+import { TerminalLogProvider } from './hooks/useTerminalLog';
 
 function App() {
   const [booted, setBooted] = useState(false);
@@ -14,7 +16,11 @@ function App() {
       <MatrixRain rainState={booted ? 'idle' : 'scanning'} />
       {booted ? (
         <WizardProvider>
-          <MainLayout />
+          <SettingsProvider>
+            <TerminalLogProvider>
+              <MainLayout />
+            </TerminalLogProvider>
+          </SettingsProvider>
         </WizardProvider>
       ) : (
         <BootSequence onComplete={() => setBooted(true)} />

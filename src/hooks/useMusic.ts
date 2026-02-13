@@ -73,6 +73,19 @@ export function useMusic() {
     }
   }, [enabled]);
 
+  // Resilience: periodically check if audio was paused unexpectedly
+  // (WebView2 on Windows can suspend audio during long async operations)
+  useEffect(() => {
+    if (!enabled) return;
+    const check = setInterval(() => {
+      const audio = audioRef.current;
+      if (audio && audio.paused && startedRef.current) {
+        audio.play().catch(() => {});
+      }
+    }, 3000);
+    return () => clearInterval(check);
+  }, [enabled]);
+
   const toggle = useCallback(() => {
     setEnabled(prev => {
       const next = !prev;

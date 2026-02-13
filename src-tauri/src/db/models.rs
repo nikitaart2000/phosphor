@@ -17,6 +17,21 @@ pub struct CloneRecord {
     pub notes: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedCard {
+    pub id: Option<i64>,
+    pub name: String,
+    pub card_type: String,
+    pub frequency: String,
+    pub uid: String,
+    pub raw: String,
+    pub decoded: String,
+    pub cloneable: bool,
+    pub recommended_blank: String,
+    pub created_at: String,
+}
+
 impl Database {
     pub fn insert_record(&self, record: &CloneRecord) -> Result<i64, AppError> {
         let conn = self.conn.lock().map_err(|e| {
@@ -66,5 +81,65 @@ impl Database {
             records.push(row?);
         }
         Ok(records)
+    }
+
+    pub fn insert_saved_card(&self, card: &SavedCard) -> Result<i64, AppError> {
+        let conn = self.conn.lock().map_err(|e| {
+            AppError::DatabaseError(format!("Lock poisoned: {}", e))
+        })?;
+        conn.execute(
+            "INSERT INTO saved_cards (name, card_type, frequency, uid, raw, decoded, cloneable, recommended_blank, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                card.name,
+                card.card_type,
+                card.frequency,
+                card.uid,
+                card.raw,
+                card.decoded,
+                card.cloneable as i32,
+                card.recommended_blank,
+                card.created_at,
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn get_saved_cards(&self) -> Result<Vec<SavedCard>, AppError> {
+        let conn = self.conn.lock().map_err(|e| {
+            AppError::DatabaseError(format!("Lock poisoned: {}", e))
+        })?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, card_type, frequency, uid, raw, decoded, cloneable, recommended_blank, created_at
+             FROM saved_cards ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(SavedCard {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                card_type: row.get(2)?,
+                frequency: row.get(3)?,
+                uid: row.get(4)?,
+                raw: row.get(5)?,
+                decoded: row.get(6)?,
+                cloneable: row.get::<_, i32>(7)? != 0,
+                recommended_blank: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        })?;
+
+        let mut cards = Vec::new();
+        for row in rows {
+            cards.push(row?);
+        }
+        Ok(cards)
+    }
+
+    pub fn delete_saved_card(&self, id: i64) -> Result<(), AppError> {
+        let conn = self.conn.lock().map_err(|e| {
+            AppError::DatabaseError(format!("Lock poisoned: {}", e))
+        })?;
+        conn.execute("DELETE FROM saved_cards WHERE id = ?1", params![id])?;
+        Ok(())
     }
 }

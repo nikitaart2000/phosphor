@@ -1,7 +1,20 @@
 // Typed Tauri invoke wrappers for PM3 backend commands.
 
 import { invoke } from '@tauri-apps/api/core';
-import type { WizardState, CloneRecord, BlankType } from '../machines/types';
+import type { WizardState, CloneRecord, BlankType, FirmwareCheckResult } from '../machines/types';
+
+export interface SavedCard {
+  id: number | null;
+  name: string;
+  cardType: string;
+  frequency: string;
+  uid: string;
+  raw: string;
+  decoded: string;
+  cloneable: boolean;
+  recommendedBlank: string;
+  createdAt: string;
+}
 
 /**
  * Detect connected Proxmark3 device.
@@ -40,10 +53,10 @@ export async function writeCloneWithData(
 ): Promise<WizardState> {
   return invoke<WizardState>('write_clone_with_data', {
     port,
-    card_type: cardType,
+    cardType,
     uid,
     decoded,
-    blank_type: blankType,
+    blankType,
   });
 }
 
@@ -61,10 +74,10 @@ export async function verifyCloneWithData(
 ): Promise<WizardState> {
   return invoke<WizardState>('verify_clone', {
     port,
-    source_uid: sourceUid,
-    source_card_type: sourceCardType,
-    source_decoded: sourceDecoded,
-    blank_type: blankType,
+    sourceUid,
+    sourceCardType,
+    sourceDecoded,
+    blankType,
   });
 }
 
@@ -82,6 +95,59 @@ export async function getHistory(): Promise<CloneRecord[]> {
  */
 export async function saveCloneRecord(record: CloneRecord): Promise<number> {
   return invoke<number>('save_clone_record', { record });
+}
+
+/**
+ * Check firmware version match between bundled client and device OS.
+ * Returns version info and whether they match.
+ */
+export async function checkFirmwareVersion(port: string): Promise<FirmwareCheckResult> {
+  return invoke<FirmwareCheckResult>('check_firmware_version', { port });
+}
+
+/**
+ * Start flashing firmware to the connected PM3 device.
+ * Returns immediately — progress is streamed via Tauri events:
+ * "firmware-progress", "firmware-complete", "firmware-failed"
+ */
+export async function flashFirmware(port: string, hardwareVariant: string): Promise<void> {
+  return invoke<void>('flash_firmware', { port, hardwareVariant });
+}
+
+/**
+ * Cancel an in-progress firmware flash by killing the child process.
+ */
+export async function cancelFlash(): Promise<void> {
+  return invoke<void>('cancel_flash');
+}
+
+// ── Erase (standalone, not wizard FSM) ──────────────────────────
+
+export interface DetectChipResult {
+  chipType: string;
+  passwordProtected: boolean;
+  details: string;
+}
+
+export interface WipeResult {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Detect the underlying chip type on the reader (T5577 or EM4305).
+ * Independent of the wizard FSM.
+ */
+export async function detectChip(port: string): Promise<DetectChipResult> {
+  return invoke<DetectChipResult>('detect_chip', { port });
+}
+
+/**
+ * Wipe a chip that was previously detected by detectChip.
+ * Independent of the wizard FSM.
+ */
+export async function wipeChip(port: string, chipType: string): Promise<WipeResult> {
+  return invoke<WipeResult>('wipe_chip', { port, chipType });
 }
 
 /**
@@ -115,4 +181,99 @@ export async function markComplete(
   return invoke<WizardState>('wizard_action', {
     action: { action: 'MarkComplete', payload: { source, target } },
   });
+}
+
+// -- HF Clone Operations -----------------------------------------------
+
+/**
+ * Run `hf mf autopwn` — key recovery + dump for MIFARE Classic.
+ * Long-running (seconds to hours). Progress streamed via `hf-progress` events.
+ * Rust handles FSM transitions internally: CardIdentified → HfProcessing → HfDumpReady.
+ */
+export async function hfAutopwn(): Promise<WizardState> {
+  return invoke<WizardState>('hf_autopwn');
+}
+
+/**
+ * Dump UL/NTAG or iCLASS card memory (no key recovery needed).
+ * Fast operation. Rust handles FSM: CardIdentified → HfProcessing → HfDumpReady.
+ */
+export async function hfDump(): Promise<WizardState> {
+  return invoke<WizardState>('hf_dump');
+}
+
+/**
+ * Write HF clone to magic blank card.
+ * Dispatches to the correct write workflow based on blank type.
+ */
+export async function hfWriteClone(
+  sourceUid: string,
+  cardType: string,
+  blankType: string,
+): Promise<WizardState> {
+  return invoke<WizardState>('hf_write_clone', { sourceUid, cardType, blankType });
+}
+
+/**
+ * Verify an HF clone by reading back and comparing with source.
+ * 2-layer: UID match (primary) + dump file comparison (secondary).
+ */
+export async function hfVerifyClone(
+  sourceUid: string,
+  cardType: string,
+  blankType: string,
+): Promise<WizardState> {
+  return invoke<WizardState>('hf_verify_clone', { sourceUid, cardType, blankType });
+}
+
+/**
+ * Cancel a running HF operation (kills the child process).
+ */
+export async function cancelHfOperation(): Promise<void> {
+  return invoke<void>('cancel_hf_operation');
+}
+
+// -- Saved Cards -------------------------------------------------------
+
+/**
+ * Save a card to the local database for later cloning.
+ * Returns the new record's ID.
+ */
+export async function saveCard(card: {
+  name: string;
+  cardType: string;
+  frequency: string;
+  uid: string;
+  raw: string;
+  decoded: string;
+  cloneable: boolean;
+  recommendedBlank: string;
+  createdAt: string;
+}): Promise<number> {
+  return invoke<number>('save_card', { card });
+}
+
+/**
+ * Retrieve all saved cards from the local database.
+ * Ordered by creation date, newest first.
+ */
+export async function getSavedCards(): Promise<SavedCard[]> {
+  return invoke<SavedCard[]>('get_saved_cards');
+}
+
+/**
+ * Delete a saved card by ID.
+ */
+export async function deleteSavedCard(id: number): Promise<void> {
+  return invoke<void>('delete_saved_card', { id });
+}
+
+// -- Raw PM3 Command ---------------------------------------------------
+
+/**
+ * Run an arbitrary PM3 command string on the connected device.
+ * Returns raw console output.
+ */
+export async function runRawCommand(port: string, command: string): Promise<string> {
+  return invoke<string>('run_raw_command', { port, command });
 }

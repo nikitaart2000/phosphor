@@ -52,6 +52,17 @@ export type BlankType =
 
 export type RecoveryAction = 'Retry' | 'GoBack' | 'Reconnect' | 'Manual';
 
+// Matches Rust ProcessPhase enum — autopwn attack phases
+export type ProcessPhase = 'KeyCheck' | 'Darkside' | 'Nested' | 'Hardnested' | 'StaticNested' | 'Dumping';
+
+// HF progress event payload emitted by Rust during autopwn/dump
+export interface HfProgressPayload {
+  phase: string;
+  keys_found: number;
+  keys_total: number;
+  elapsed_secs: number;
+}
+
 export interface CardData {
   uid: string;
   raw: string;
@@ -128,18 +139,56 @@ export type WizardState =
   | { step: 'ScanningCard' }
   | { step: 'CardIdentified'; data: CardIdentification }
   | { step: 'WaitingForBlank'; data: { expected_blank: BlankType } }
-  | { step: 'BlankDetected'; data: { blank_type: BlankType; ready_to_write: boolean } }
+  | { step: 'BlankDetected'; data: { blank_type: BlankType; ready_to_write: boolean; existing_data_type: string | null } }
   | { step: 'Writing'; data: WriteProgress }
+  | { step: 'HfProcessing'; data: { phase: string; keys_found: number; keys_total: number; elapsed_secs: number } }
+  | { step: 'HfDumpReady'; data: { dump_info: string } }
   | { step: 'Verifying' }
   | { step: 'VerificationComplete'; data: VerificationResult }
   | { step: 'Complete'; data: CloneCompletion }
   | { step: 'Error'; data: ErrorDetails };
 
 // Extract the step name as a string literal type
-export type WizardStepName = WizardState['step'];
+// Includes Rust-derived steps + frontend-only firmware states
+export type WizardStepName = WizardState['step']
+  | 'CheckingFirmware'
+  | 'FirmwareOutdated'
+  | 'UpdatingFirmware'
+  | 'RedetectingDevice'
+  | 'HfProcessing'
+  | 'HfDumpReady';
 
 // Helper: extract data type for a given step
 export type StepData<S extends WizardStepName> = Extract<WizardState, { step: S }> extends { data: infer D } ? D : never;
+
+// Firmware check result from Rust backend (camelCase from serde rename_all)
+export interface FirmwareCheckResult {
+  matched: boolean;
+  clientVersion: string;
+  deviceFirmwareVersion: string;
+  hardwareVariant: 'rdv4' | 'rdv4-bt' | 'generic' | 'generic-256' | 'unknown';
+  firmwarePathExists: boolean;
+}
+
+// Firmware flash progress event payload (emitted via Tauri events)
+export interface FirmwareProgress {
+  phase: 'connecting' | 'erasing' | 'writing' | 'done' | 'error';
+  percent: number;
+  message: string;
+}
+
+// A saved card record stored in the local database
+export interface SavedCard {
+  name: string;
+  cardType: string;
+  frequency: string;
+  uid: string;
+  raw: string;
+  decoded: string;
+  cloneable: boolean;
+  recommendedBlank: string;
+  createdAt: string;
+}
 
 // T5577 chip status for password detection and safety workflow
 export interface T5577Status {

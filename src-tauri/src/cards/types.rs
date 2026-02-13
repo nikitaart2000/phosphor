@@ -267,9 +267,8 @@ pub enum RecoveryAction {
     Manual,
 }
 
-/// HF card processing phases (reserved for Phase 3: HF card support).
+/// HF card processing phases for autopwn progress tracking.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[allow(dead_code)]
 pub enum ProcessPhase {
     KeyCheck,
     Darkside,
@@ -277,6 +276,31 @@ pub enum ProcessPhase {
     Hardnested,
     StaticNested,
     Dumping,
+}
+
+/// Events parsed line-by-line from `hf mf autopwn` streaming output.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AutopwnEvent {
+    /// Dictionary attack progress: found N of M keys, method char (D=dict)
+    DictionaryProgress { found: u32, total: u32 },
+    /// Individual key recovered
+    KeyFound { key: String },
+    /// Darkside attack started (0 known keys + WEAK PRNG)
+    DarksideStarted,
+    /// Nested attack started (1+ keys + WEAK PRNG)
+    NestedStarted,
+    /// Hardnested attack started (1+ keys + HARD PRNG)
+    HardnestedStarted,
+    /// Staticnested attack started (1+ keys + STATIC PRNG)
+    StaticnestedStarted,
+    /// All blocks dumped successfully
+    DumpComplete { file_path: String },
+    /// Partial dump (some sectors unreadable)
+    DumpPartial { file_path: String },
+    /// All key recovery attempts failed
+    Failed { reason: String },
+    /// Autopwn finished with execution time
+    Finished { time_secs: u32 },
 }
 
 /// Magic card generation identifiers (reserved for Phase 3: HF card support).

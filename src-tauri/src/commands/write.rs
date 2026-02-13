@@ -38,6 +38,8 @@ pub async fn write_clone_with_data(
     blank_type: Option<BlankType>,
     machine: State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
+    log::debug!("write_clone_with_data: port={}, card_type={:?}, uid={}, blank_type={:?}", port, card_type, uid, blank_type);
+
     // Guard: reject absurdly large decoded maps (prevents DoS via oversized IPC payload)
     if decoded.len() > 50 {
         return Err(AppError::CommandFailed(
@@ -45,10 +47,12 @@ pub async fn write_clone_with_data(
         ));
     }
 
-    // Validate uid: must be non-empty hex with optional colons (blocks semicolons, spaces, injection)
-    if uid.is_empty() || !uid.chars().all(|c| c.is_ascii_hexdigit() || c == ':') {
+    // Validate uid: must be non-empty alphanumeric with optional colons.
+    // HID UIDs use format "FC65:CN29334" (contains non-hex letters like N).
+    // Blocks semicolons, spaces, newlines — prevents command injection.
+    if uid.is_empty() || !uid.chars().all(|c| c.is_ascii_alphanumeric() || c == ':') {
         return Err(AppError::CommandFailed(
-            "Invalid UID: must contain only hex characters and colons".into(),
+            "Invalid UID: must contain only alphanumeric characters and colons".into(),
         ));
     }
     if uid.len() > 200 {
@@ -94,10 +98,17 @@ pub async fn write_clone_with_data(
             match write_t5577_flow(&app, &port, &card_type, &uid, &decoded, &machine).await {
                 Ok(state) => Ok(state),
                 Err(e) => {
+                    let err_detail = e.to_string();
+                    log::warn!("T5577 flow error: {}", err_detail);
+                    // Show the actual PM3 error to the user for debugging
+                    let user_msg = format!(
+                        "Write failed: {}",
+                        err_detail.lines().last().unwrap_or("unknown error")
+                    );
                     let _ = report_error(
                         &machine,
-                        &e.to_string(),
-                        "Write operation failed. Do not remove the card.",
+                        &err_detail,
+                        &user_msg,
                         true,
                         Some(RecoveryAction::Retry),
                     );
@@ -112,10 +123,15 @@ pub async fn write_clone_with_data(
             match write_em4305_flow(&app, &port, &card_type, &uid, &decoded, &machine).await {
                 Ok(state) => Ok(state),
                 Err(e) => {
+                    let err_detail = e.to_string();
+                    let user_msg = format!(
+                        "Write failed: {}",
+                        err_detail.lines().last().unwrap_or("unknown error")
+                    );
                     let _ = report_error(
                         &machine,
-                        &e.to_string(),
-                        "Write operation failed. Do not remove the card.",
+                        &err_detail,
+                        &user_msg,
                         true,
                         Some(RecoveryAction::Retry),
                     );
@@ -142,8 +158,9 @@ pub async fn write_clone_with_data(
     }
 }
 
-/// T5577 write flow with password safety:
-/// 1. detect -> 2. check password -> 3. wipe (with password if needed) -> 4. verify wipe -> 5. clone
+/// T5577 write flow:
+/// - No password: detect -> clone (clone overwrites config + data blocks directly)
+/// - Password: detect -> find password -> wipe -> verify wipe -> clone
 async fn write_t5577_flow(
     app: &AppHandle,
     port: &str,
@@ -153,11 +170,13 @@ async fn write_t5577_flow(
     machine: &State<'_, Mutex<WizardMachine>>,
 ) -> Result<WizardState, AppError> {
     // Step 1: Detect T5577
+    log::debug!("T5577 flow: Step 1 detect");
     update_progress(app, machine, 0.1, Some(0), Some(T5577_TOTAL_STEPS))?;
 
     let detect_out =
         connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
     let t5577_status = output_parser::parse_t5577_detect(&detect_out);
+    log::debug!("T5577 detect: detected={}, pw={}", t5577_status.detected, t5577_status.password_set);
 
     if !t5577_status.detected {
         return report_error(
@@ -205,41 +224,53 @@ async fn write_t5577_flow(
         None
     };
 
-    // Step 3: Wipe (with password if needed)
-    update_progress(app, machine, 0.35, Some(2), Some(T5577_TOTAL_STEPS))?;
+    // Step 3-4: Wipe + verify (ONLY when password-protected).
+    // For clean T5577s the clone command overwrites config + data blocks directly.
+    // Skipping wipe avoids an extra write cycle that can fail on weaker LF antennas
+    // (PM3 Easy) and eliminates two subprocess spawns (fewer serial port open/close).
+    if password.is_some() {
+        update_progress(app, machine, 0.35, Some(2), Some(T5577_TOTAL_STEPS))?;
 
-    let wipe_cmd = command_builder::build_wipe_command(&BlankType::T5577, password.as_deref())
-        .ok_or_else(|| AppError::CommandFailed("No wipe command for this blank type".into()))?;
-    connection::run_command(app, port, &wipe_cmd).await?;
+        let wipe_cmd =
+            command_builder::build_wipe_command(&BlankType::T5577, password.as_deref())
+                .ok_or_else(|| {
+                    AppError::CommandFailed("No wipe command for this blank type".into())
+                })?;
+        connection::run_command(app, port, &wipe_cmd).await?;
 
-    // Step 4: Verify wipe — ensure T5577 is detected and no longer password-protected.
-    // PM3 can return exit code 0 even when a password-protected wipe fails silently.
-    // Proceeding to clone without this check risks soft-bricking the card.
-    update_progress(app, machine, 0.5, Some(3), Some(T5577_TOTAL_STEPS))?;
+        // Verify wipe — ensure T5577 is detected and no longer password-protected.
+        // PM3 can return exit code 0 even when a password-protected wipe fails silently.
+        update_progress(app, machine, 0.5, Some(3), Some(T5577_TOTAL_STEPS))?;
 
-    let verify_wipe_out =
-        connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
-    let verify_status = output_parser::parse_t5577_detect(&verify_wipe_out);
+        let verify_wipe_out =
+            connection::run_command(app, port, command_builder::build_t5577_detect()).await?;
+        let verify_status = output_parser::parse_t5577_detect(&verify_wipe_out);
 
-    if !verify_status.detected || verify_status.password_set {
-        return report_error(
-            machine,
-            "T5577 wipe verification failed — card may still be password-protected. Do not proceed with cloning.",
-            "Wipe verification failed. The card may still be password-protected. \
-             Do not remove the card — try again or use a different blank.",
-            true,
-            Some(RecoveryAction::Retry),
-        );
+        if !verify_status.detected || verify_status.password_set {
+            return report_error(
+                machine,
+                "T5577 wipe verification failed — card may still be password-protected",
+                "Wipe verification failed. The card may still be password-protected. \
+                 Do not remove the card — try again or use a different blank.",
+                true,
+                Some(RecoveryAction::Retry),
+            );
+        }
     }
 
-    // SAFETY: Password was cleared by wipe. Using the old password on the clone
-    // command would re-lock the card. Shadow the variable to prevent accidental use.
+    // SAFETY: If password was set, it was cleared by wipe above.
+    // Shadow the variable to prevent accidental re-lock on clone command.
     let password: Option<String> = None;
 
     // Step 5: Clone
     update_progress(app, machine, 0.7, Some(4), Some(T5577_TOTAL_STEPS))?;
 
+    log::debug!("Clone: uid={}, type={:?}, decoded={:?}", uid, card_type, decoded);
+
     let base_clone_cmd = command_builder::build_clone_command(card_type, uid, decoded);
+
+    log::debug!("clone_cmd={:?}", base_clone_cmd);
+
     match base_clone_cmd {
         Some(cmd) => {
             let final_cmd = match &password {
@@ -247,11 +278,13 @@ async fn write_t5577_flow(
                     .map_err(|e| AppError::CommandFailed(format!("Password validation failed: {}", e)))?,
                 None => cmd,
             };
-            let clone_output = connection::run_command(app, port, &final_cmd).await?;
+            log::debug!("sending={}", final_cmd);
+            let clone_output = connection::run_command(app, port, &final_cmd).await;
+            log::debug!("clone_result={:?}", clone_output.as_ref().map(|s| s.chars().take(500).collect::<String>()).map_err(|e| e.to_string()));
+            let clone_output = clone_output?;
             // Check for failure indicators in PM3 output
-            if clone_output.to_lowercase().contains("fail")
-                || clone_output.to_lowercase().contains("error")
-                || clone_output.contains("[-]")
+            if clone_output.contains("[!!]")
+                || clone_output.to_lowercase().contains("fail")
             {
                 return report_error(
                     machine,
@@ -356,9 +389,8 @@ async fn write_em4305_flow(
             let em_cmd = command_builder::build_clone_for_em4305(&cmd);
             let clone_output = connection::run_command(app, port, &em_cmd).await?;
             // Check for failure indicators in PM3 output
-            if clone_output.to_lowercase().contains("fail")
-                || clone_output.to_lowercase().contains("error")
-                || clone_output.contains("[-]")
+            if clone_output.contains("[!!]")
+                || clone_output.to_lowercase().contains("fail")
             {
                 return report_error(
                     machine,
@@ -430,9 +462,10 @@ pub async fn verify_clone(
         }
     }
 
-    // Use type-specific reader command instead of generic lf search
-    let verify_cmd = command_builder::build_verify_command(&source_card_type);
-    let verify_output = connection::run_command(&app, &port, verify_cmd).await?;
+    // Use generic `lf search` for verification — parse_lf_search is designed to parse
+    // its output format. Type-specific readers (lf hid reader, etc.) produce different
+    // output that parse_lf_search can't handle, causing false verification failures.
+    let verify_output = connection::run_command(&app, &port, "lf search").await?;
 
     // Use detailed verification if decoded fields are available
     let (success, mismatched) = if let Some(ref decoded) = source_decoded {
@@ -491,7 +524,7 @@ fn update_progress(
             "total_blocks": total_blocks,
         }),
     ) {
-        eprintln!("Failed to emit write-progress event: {}", e);
+        log::warn!("Failed to emit write-progress event: {}", e);
     }
     Ok(())
 }

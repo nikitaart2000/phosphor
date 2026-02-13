@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Phosphor",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "identifier": "com.phosphor.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -30,7 +30,11 @@
     "targets": ["nsis"],
     "externalBin": ["binaries/proxmark3"],
     "resources": {
-      "pm3-libs/*": "./"
+      "pm3-libs/*": "./",
+      "pm3-libs/platforms/*": "./platforms/",
+      "firmware/rdv4/*": "./firmware/rdv4/",
+      "firmware/rdv4-bt/*": "./firmware/rdv4-bt/",
+      "firmware/generic/*": "./firmware/generic/"
     },
     "icon": [
       "icons/32x32.png",
@@ -38,6 +42,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "copyright": "Copyright 2025-2026 nik shuv",
+    "shortDescription": "Proxmark3 GUI for one-click card cloning",
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "displayLanguageSelector": true,
+        "languages": ["English", "Russian"]
+      }
+    }
   }
 }

@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::cards::types::{BlankType, CardSummary};
+use crate::cards::types::{BlankType, CardSummary, CardType, Frequency};
 use crate::error::AppError;
 use crate::state::{WizardAction, WizardMachine, WizardState};
 
@@ -36,6 +37,19 @@ pub enum UserAction {
         source: CardSummary,
         target: CardSummary,
     },
+    BackToScan,
+    SoftReset,
+    Disconnect,
+    ReDetectBlank,
+    LoadSavedCard {
+        frequency: Frequency,
+        card_type: CardType,
+        uid: String,
+        raw: String,
+        decoded: HashMap<String, String>,
+        cloneable: bool,
+        recommended_blank: BlankType,
+    },
 }
 
 impl UserAction {
@@ -52,6 +66,27 @@ impl UserAction {
             UserAction::MarkComplete { source, target } => {
                 WizardAction::MarkComplete { source, target }
             }
+            UserAction::BackToScan => WizardAction::BackToScan,
+            UserAction::SoftReset => WizardAction::SoftReset,
+            UserAction::Disconnect => WizardAction::Disconnect,
+            UserAction::ReDetectBlank => WizardAction::ReDetectBlank,
+            UserAction::LoadSavedCard {
+                frequency,
+                card_type,
+                uid,
+                raw,
+                decoded,
+                cloneable,
+                recommended_blank,
+            } => WizardAction::LoadSavedCard {
+                frequency,
+                card_type,
+                uid,
+                raw,
+                decoded,
+                cloneable,
+                recommended_blank,
+            },
         }
     }
 }

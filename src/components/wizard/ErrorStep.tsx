@@ -27,11 +27,19 @@ function getRetryLabel(action: RecoveryAction | null | undefined, source?: strin
   }
 }
 
+const DETECT_HINTS = [
+  'Try a different USB cable (some cables are charge-only)',
+  'Check Device Manager for a COM port (Ports section)',
+  'PM3 Easy may need CH340 driver — download from wch-ic.com',
+  'Antivirus may block proxmark3.exe — add it to exceptions',
+];
+
 export function ErrorStep({ message, recoverable, recoveryAction, errorSource, onRetry, onReset }: ErrorStepProps) {
   const sfx = useSfx();
 
   const displayMessage = message || 'An unexpected error occurred.';
   const retryLabel = getRetryLabel(recoveryAction, errorSource);
+  const showDetectHints = errorSource === 'detect' && !message?.includes('firmware');
 
   return (
     <TerminalPanel title="ERROR">
@@ -40,9 +48,22 @@ export function ErrorStep({ message, recoverable, recoveryAction, errorSource, o
           [!!] ERROR
         </div>
 
-        <div style={{ color: 'var(--red-bright)', marginBottom: '16px' }}>
+        <div style={{ color: 'var(--red-bright)', marginBottom: showDetectHints ? '12px' : '16px' }}>
           {displayMessage}
         </div>
+
+        {showDetectHints && (
+          <div style={{ marginBottom: '16px', fontSize: '12px', lineHeight: '1.8' }}>
+            <div style={{ color: 'var(--green-mid)', marginBottom: '4px' }}>
+              [?] Troubleshooting:
+            </div>
+            {DETECT_HINTS.map((hint, i) => (
+              <div key={i} style={{ color: 'var(--green-dim)', paddingLeft: '12px' }}>
+                {`${i + 1}. ${hint}`}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: '12px' }}>
           {recoverable && (

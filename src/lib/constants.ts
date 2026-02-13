@@ -28,6 +28,10 @@ export const TIMEOUTS = {
 export const STEP_LABELS: Record<WizardStepName, string> = {
   Idle: 'Ready',
   DetectingDevice: 'Searching for device...',
+  CheckingFirmware: 'Checking firmware...',
+  FirmwareOutdated: 'Firmware mismatch',
+  UpdatingFirmware: 'Updating firmware...',
+  RedetectingDevice: 'Re-detecting device...',
   DeviceConnected: 'Device connected',
   ScanningCard: 'Reading card...',
   CardIdentified: 'Card identified',
@@ -37,6 +41,8 @@ export const STEP_LABELS: Record<WizardStepName, string> = {
   Verifying: 'Verifying clone...',
   VerificationComplete: 'Verification complete',
   Complete: 'Clone successful',
+  HfProcessing: 'Processing HF card...',
+  HfDumpReady: 'Dump ready',
   Error: 'Error',
 };
 
@@ -45,6 +51,10 @@ export const STEP_LABELS: Record<WizardStepName, string> = {
 export const STEP_DESCRIPTIONS: Record<WizardStepName, string> = {
   Idle: 'Connect your Proxmark3 to begin.',
   DetectingDevice: 'Looking for a Proxmark3 on USB ports.',
+  CheckingFirmware: 'Comparing client and device firmware versions.',
+  FirmwareOutdated: 'Device firmware does not match the bundled client version.',
+  UpdatingFirmware: 'Flashing firmware to device. Do not disconnect.',
+  RedetectingDevice: 'Looking for device after firmware update.',
   DeviceConnected: 'Place the card you want to copy on the reader.',
   ScanningCard: 'Detecting card type and reading data.',
   CardIdentified: 'Review the detected card information below.',
@@ -54,6 +64,8 @@ export const STEP_DESCRIPTIONS: Record<WizardStepName, string> = {
   Verifying: 'Reading back to confirm the data was written correctly.',
   VerificationComplete: 'Review the verification results below.',
   Complete: 'The card has been cloned. You may remove it.',
+  HfProcessing: 'Recovering encryption keys and dumping card memory.',
+  HfDumpReady: 'Card data dumped. Swap to a blank magic card to write.',
   Error: 'Something went wrong. See details below.',
 };
 

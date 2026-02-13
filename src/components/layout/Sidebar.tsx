@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSfx } from '../../hooks/useSfx';
 
-export type TabId = 'scan' | 'write' | 'history' | 'settings';
+export type TabId = 'scan' | 'write' | 'erase' | 'saved' | 'history' | 'settings';
 
 interface SidebarProps {
   activeTab: TabId;
@@ -14,6 +14,8 @@ interface SidebarProps {
 const TABS: { id: TabId; label: string }[] = [
   { id: 'scan', label: 'SCAN' },
   { id: 'write', label: 'WRITE' },
+  { id: 'erase', label: 'ERASE' },
+  { id: 'saved', label: 'SAVED' },
   { id: 'history', label: 'HISTORY' },
   { id: 'settings', label: 'SETTINGS' },
 ];

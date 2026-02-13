@@ -5,20 +5,34 @@ import type { BlankType } from '../../machines/types';
 
 interface BlankStepProps {
   onReady: () => void;
+  onErase?: () => Promise<void>;
   isLoading?: boolean;
   expectedBlank?: BlankType | null;
   blankType?: BlankType | null;
   readyToWrite?: boolean;
+  existingData?: string | null;
   onReset?: () => void;
+  onBack?: () => void;
+  frequency?: 'LF' | 'HF' | null;
 }
 
 const DETECT_FRAMES = ['.  ', '.. ', '...', ' ..', '  .', '   '];
 
-export function BlankStep({ onReady, isLoading, expectedBlank, blankType, readyToWrite, onReset }: BlankStepProps) {
+const btnBase: React.CSSProperties = {
+  background: 'var(--bg-void)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '13px',
+  fontWeight: 600,
+  padding: '6px 20px',
+  cursor: 'pointer',
+  border: '2px solid',
+};
+
+export function BlankStep({ onReady, onErase, isLoading, expectedBlank, blankType, readyToWrite, existingData, onReset, onBack, frequency }: BlankStepProps) {
   const sfx = useSfx();
   const [frameIdx, setFrameIdx] = useState(0);
+  const [erasing, setErasing] = useState(false);
 
-  // Animate detection dots while loading
   useEffect(() => {
     if (!isLoading) return;
     const timer = setInterval(() => {
@@ -28,32 +42,41 @@ export function BlankStep({ onReady, isLoading, expectedBlank, blankType, readyT
   }, [isLoading]);
 
   const blankLabel = expectedBlank || 'T5577';
+  const hasData = !!existingData;
+
+  const handleErase = async () => {
+    if (!onErase) return;
+    setErasing(true);
+    try {
+      await onErase();
+    } finally {
+      setErasing(false);
+    }
+  };
 
   return (
     <TerminalPanel title="BLANK CARD">
       <div style={{ fontSize: '13px', lineHeight: '1.8' }}>
-        <div style={{ color: 'var(--amber)', marginBottom: '12px' }}>
-          [!!] Remove source fob. Place a {blankLabel} blank on the reader.
-        </div>
-
         {isLoading ? (
           <div>
-            <div style={{ color: 'var(--green-dim)' }}>
-              DETECTING{DETECT_FRAMES[frameIdx]}
+            <div style={{ color: erasing ? 'var(--amber)' : 'var(--green-dim)' }}>
+              {erasing ? '[!] ERASING CARD...' : `[=] Scanning for ${blankLabel} card${DETECT_FRAMES[frameIdx]}`}
             </div>
-            {onReset && (
+            {!erasing && frequency && (
+              <div style={{ color: 'var(--green-dim)', marginTop: '4px', fontSize: '12px' }}>
+                {frequency === 'HF'
+                  ? '[=] Place on HF side (opposite from coil)'
+                  : '[=] Place on LF side (coil side)'}
+              </div>
+            )}
+            {!erasing && onReset && (
               <div style={{ marginTop: '16px' }}>
                 <button
                   onClick={() => { sfx.action(); onReset(); }}
                   style={{
-                    background: 'var(--bg-void)',
+                    ...btnBase,
                     color: 'var(--red-bright)',
-                    border: '2px solid var(--red-bright)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    padding: '6px 20px',
-                    cursor: 'pointer',
+                    borderColor: 'var(--red-bright)',
                   }}
                   onMouseEnter={(e) => {
                     sfx.hover();
@@ -70,27 +93,73 @@ export function BlankStep({ onReady, isLoading, expectedBlank, blankType, readyT
           </div>
         ) : blankType ? (
           <>
-            <div style={{ color: 'var(--green-bright)' }}>
-              [+] {blankType} blank detected
+            <div style={{ color: hasData ? 'var(--amber)' : 'var(--green-bright)' }}>
+              [+] {blankType} detected
             </div>
             <div style={{ color: 'var(--green-dim)', marginTop: '4px' }}>
               TYPE : {blankType} (writable)
             </div>
-            <div style={{ color: 'var(--green-dim)' }}>
-              STATE: BLANK
+            <div style={{ color: hasData ? 'var(--amber)' : 'var(--green-dim)' }}>
+              STATE: {hasData ? `HAS DATA (${existingData})` : 'CLEAN'}
             </div>
-            <div style={{ marginTop: '16px' }}>
+
+            {hasData && (
+              <div style={{ color: 'var(--amber)', marginTop: '8px', fontSize: '12px' }}>
+                [!] This card already contains {existingData} data.
+                Erase it first or overwrite directly.
+              </div>
+            )}
+
+            <div style={{ marginTop: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              {onBack && (
+                <button
+                  onClick={() => { sfx.action(); onBack(); }}
+                  style={{
+                    ...btnBase,
+                    color: 'var(--green-dim)',
+                    borderColor: 'var(--green-dim)',
+                  }}
+                  onMouseEnter={(e) => {
+                    sfx.hover();
+                    e.currentTarget.style.background = 'var(--green-ghost)';
+                    e.currentTarget.style.color = 'var(--green-bright)';
+                    e.currentTarget.style.borderColor = 'var(--green-bright)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-void)';
+                    e.currentTarget.style.color = 'var(--green-dim)';
+                    e.currentTarget.style.borderColor = 'var(--green-dim)';
+                  }}
+                >
+                  {'<--'} BACK
+                </button>
+              )}
+              {hasData && onErase && (
+                <button
+                  onClick={() => { sfx.action(); handleErase(); }}
+                  style={{
+                    ...btnBase,
+                    color: 'var(--amber)',
+                    borderColor: 'var(--amber)',
+                  }}
+                  onMouseEnter={(e) => {
+                    sfx.hover();
+                    e.currentTarget.style.background = 'rgba(255, 184, 0, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-void)';
+                  }}
+                >
+                  [!!] ERASE FIRST
+                </button>
+              )}
               <button
                 onClick={() => { sfx.action(); onReady(); }}
                 disabled={readyToWrite === false}
                 style={{
-                  background: 'var(--bg-void)',
+                  ...btnBase,
                   color: readyToWrite === false ? 'var(--green-dim)' : 'var(--green-bright)',
-                  border: `2px solid ${readyToWrite === false ? 'var(--green-dim)' : 'var(--green-bright)'}`,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  padding: '6px 20px',
+                  borderColor: readyToWrite === false ? 'var(--green-dim)' : 'var(--green-bright)',
                   cursor: readyToWrite === false ? 'not-allowed' : 'pointer',
                   opacity: readyToWrite === false ? 0.5 : 1,
                 }}
@@ -103,7 +172,7 @@ export function BlankStep({ onReady, isLoading, expectedBlank, blankType, readyT
                   e.currentTarget.style.background = 'var(--bg-void)';
                 }}
               >
-                {'-->'} BEGIN WRITE
+                {hasData ? '[!] OVERWRITE' : '-->'} {hasData ? '' : 'BEGIN '}WRITE
               </button>
             </div>
           </>

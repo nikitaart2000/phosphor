@@ -3,9 +3,13 @@ import { TopBar } from './TopBar';
 import { Sidebar, type TabId } from './Sidebar';
 import { StatusBar, type SystemStatus } from './StatusBar';
 import { WizardContainer } from '../wizard/WizardContainer';
+import { EraseView } from '../erase/EraseView';
 import { HistoryView } from '../history/HistoryView';
+import { SavedView } from '../saved/SavedView';
+import { SettingsView } from '../settings/SettingsView';
 import { useMusic } from '../../hooks/useMusic';
 import { useWizard } from '../../hooks/useWizard';
+import { LiveTerminal } from '../shared/LiveTerminal';
 
 export function MainLayout() {
   const [activeTab, setActiveTab] = useState<TabId>('scan');
@@ -38,22 +42,28 @@ export function MainLayout() {
       case 'scan':
       case 'write':
         return <WizardContainer />;
+      case 'erase':
+        return (
+          <div style={{ padding: '24px', position: 'relative', zIndex: 5, display: 'flex', justifyContent: 'center' }}>
+            <EraseView port={wizard.context.port ?? undefined} />
+          </div>
+        );
       case 'history':
         return (
           <div style={{ padding: '24px', position: 'relative', zIndex: 5 }}>
             <HistoryView />
           </div>
         );
+      case 'saved':
+        return (
+          <div style={{ padding: '24px', position: 'relative', zIndex: 5 }}>
+            <SavedView />
+          </div>
+        );
       case 'settings':
         return (
-          <div style={{
-            padding: '24px',
-            position: 'relative',
-            zIndex: 5,
-            color: 'var(--green-dim)',
-            fontSize: '13px',
-          }}>
-            [::] SETTINGS -- placeholder
+          <div style={{ padding: '24px', position: 'relative', zIndex: 5 }}>
+            <SettingsView />
           </div>
         );
     }
@@ -63,7 +73,7 @@ export function MainLayout() {
     <div
       style={{
         display: 'grid',
-        gridTemplateRows: '32px 1fr 24px',
+        gridTemplateRows: '32px 1fr auto 24px',
         gridTemplateColumns: '180px 1fr',
         width: '100%',
         height: '100%',
@@ -73,7 +83,7 @@ export function MainLayout() {
     >
       {/* TopBar spans full width */}
       <div style={{ gridColumn: '1 / -1' }}>
-        <TopBar connected={connected} />
+        <TopBar connected={connected} onDisconnect={wizard.disconnect} />
       </div>
 
       {/* Sidebar */}
@@ -94,6 +104,11 @@ export function MainLayout() {
         }}
       >
         {renderContent()}
+      </div>
+
+      {/* LiveTerminal spans full width */}
+      <div style={{ gridColumn: '1 / -1' }}>
+        <LiveTerminal />
       </div>
 
       {/* StatusBar spans full width */}

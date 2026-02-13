@@ -30,6 +30,19 @@ impl Database {
                 success     INTEGER NOT NULL DEFAULT 0,
                 timestamp   TEXT NOT NULL,
                 notes       TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS saved_cards (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                name              TEXT NOT NULL,
+                card_type         TEXT NOT NULL,
+                frequency         TEXT NOT NULL,
+                uid               TEXT NOT NULL,
+                raw               TEXT NOT NULL DEFAULT '',
+                decoded           TEXT NOT NULL DEFAULT '{}',
+                cloneable         INTEGER NOT NULL DEFAULT 1,
+                recommended_blank TEXT NOT NULL DEFAULT 'T5577',
+                created_at        TEXT NOT NULL
             );",
         )?;
 

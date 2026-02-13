@@ -7,6 +7,8 @@ mod state;
 
 use std::sync::Mutex;
 
+use commands::firmware::FlashState;
+use pm3::connection::HfOperationState;
 use state::WizardMachine;
 use tauri::Manager;
 
@@ -24,6 +26,8 @@ pub fn run() {
                 db::Database::open(data_dir).expect("failed to open database");
             app.manage(database);
             app.manage(Mutex::new(WizardMachine::new()));
+            app.manage(FlashState::new());
+            app.manage(HfOperationState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -37,6 +41,20 @@ pub fn run() {
             commands::write::verify_clone,
             commands::history::get_history,
             commands::history::save_clone_record,
+            commands::firmware::check_firmware_version,
+            commands::firmware::flash_firmware,
+            commands::firmware::cancel_flash,
+            commands::erase::detect_chip,
+            commands::erase::wipe_chip,
+            commands::saved::save_card,
+            commands::saved::get_saved_cards,
+            commands::saved::delete_saved_card,
+            commands::raw::run_raw_command,
+            commands::hf_clone::hf_autopwn,
+            commands::hf_clone::hf_write_clone,
+            commands::hf_clone::hf_dump,
+            commands::hf_clone::hf_verify_clone,
+            commands::hf_clone::cancel_hf_operation,
         ])
         .run(tauri::generate_context!())
         .expect("error running Phosphor");

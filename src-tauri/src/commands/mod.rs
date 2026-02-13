@@ -1,6 +1,11 @@
 pub mod blank;
 pub mod device;
+pub mod erase;
+pub mod firmware;
+pub mod hf_clone;
 pub mod history;
+pub mod raw;
+pub mod saved;
 pub mod scan;
 pub mod wizard;
 pub mod write;

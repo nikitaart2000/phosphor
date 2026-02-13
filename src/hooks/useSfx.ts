@@ -2,9 +2,13 @@ import { useCallback, useRef } from 'react';
 
 let audioCtx: AudioContext | null = null;
 
-function getCtx(): AudioContext {
-  if (!audioCtx) audioCtx = new AudioContext();
-  return audioCtx;
+function getCtx(): AudioContext | null {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    return audioCtx;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -13,6 +17,7 @@ function getCtx(): AudioContext {
  */
 function playHoverClick() {
   const ctx = getCtx();
+  if (!ctx) return;
   const now = ctx.currentTime;
 
   // Short noise impulse — the "click" body
@@ -48,6 +53,7 @@ function playHoverClick() {
  */
 function playButtonClick() {
   const ctx = getCtx();
+  if (!ctx) return;
   const now = ctx.currentTime;
 
   const len = Math.floor(ctx.sampleRate * 0.006);
@@ -92,6 +98,7 @@ function playButtonClick() {
  */
 function playActionClick() {
   const ctx = getCtx();
+  if (!ctx) return;
   const now = ctx.currentTime;
 
   const len = Math.floor(ctx.sampleRate * 0.008);

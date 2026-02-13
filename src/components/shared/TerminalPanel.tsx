@@ -7,14 +7,6 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ title, children, width }: TerminalPanelProps) {
-  // Build the top border with title embedded
-  // Format: +-- TITLE -----------+
-  const titlePart = `\u2500 ${title} `;
-  const minBorderLen = 30;
-  const remainingLen = Math.max(0, minBorderLen - titlePart.length - 2);
-  const topBorder = `\u250C${titlePart}${'\u2500'.repeat(remainingLen)}\u2510`;
-  const bottomBorder = `\u2514${'\u2500'.repeat(topBorder.length - 2)}\u2518`;
-
   return (
     <div
       style={{
@@ -22,20 +14,25 @@ export function TerminalPanel({ title, children, width }: TerminalPanelProps) {
         fontSize: '13px',
         color: 'var(--green-bright)',
         width: width || '100%',
+        border: '1px solid var(--green-dim)',
+        boxShadow: '0 0 6px rgba(0,255,65,0.15), inset 0 0 6px rgba(0,255,65,0.05)',
       }}
     >
-      <div style={{ color: 'var(--green-dim)', whiteSpace: 'pre' }}>{topBorder}</div>
       <div
         style={{
-          padding: '8px 12px',
-          borderLeft: '1px solid var(--green-dim)',
-          borderRight: '1px solid var(--green-dim)',
-          minHeight: '40px',
+          padding: '4px 12px',
+          fontSize: '11px',
+          color: 'var(--green-mid)',
+          borderBottom: '1px solid var(--green-dim)',
+          letterSpacing: '2px',
+          fontWeight: 600,
         }}
       >
+        {title}
+      </div>
+      <div style={{ padding: '8px 12px', minHeight: '40px' }}>
         {children}
       </div>
-      <div style={{ color: 'var(--green-dim)', whiteSpace: 'pre' }}>{bottomBorder}</div>
     </div>
   );
 }

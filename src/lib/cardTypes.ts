@@ -304,6 +304,13 @@ export const CARD_DECODED_FIELDS: Partial<Record<CardType, string[]>> = {
   COTAG: [],
   EM4x50: [],
   Hitag: [],
+  // -- HF cards (13.56 MHz) --
+  MifareClassic1K: ['uid', 'atqa', 'sak', 'prng', 'magic', 'uid_size'],
+  MifareClassic4K: ['uid', 'atqa', 'sak', 'prng', 'magic', 'uid_size'],
+  MifareUltralight: ['uid', 'atqa', 'sak', 'uid_size', 'ul_type'],
+  NTAG: ['uid', 'atqa', 'sak', 'uid_size', 'ntag_type'],
+  DESFire: ['uid', 'atqa', 'sak', 'ats'],
+  IClass: ['uid'],
 };
 
 /**

@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::cards::types::{
-    BlankType, CardData, CardSummary, CardType, Frequency, RecoveryAction,
+    BlankType, CardData, CardSummary, CardType, Frequency, ProcessPhase, RecoveryAction,
 };
 use crate::error::AppError;
 
@@ -23,12 +25,22 @@ pub enum WizardState {
         cloneable: bool,
         recommended_blank: BlankType,
     },
+    HfProcessing {
+        phase: ProcessPhase,
+        keys_found: u32,
+        keys_total: u32,
+        elapsed_secs: u32,
+    },
+    HfDumpReady {
+        dump_info: String,
+    },
     WaitingForBlank {
         expected_blank: BlankType,
     },
     BlankDetected {
         blank_type: BlankType,
         ready_to_write: bool,
+        existing_data_type: Option<String>,
     },
     Writing {
         progress: f32,
@@ -70,11 +82,23 @@ pub enum WizardAction {
         cloneable: bool,
         recommended_blank: BlankType,
     },
+    StartHfProcess,
+    UpdateHfProgress {
+        phase: ProcessPhase,
+        keys_found: u32,
+        keys_total: u32,
+        elapsed_secs: u32,
+    },
+    HfProcessComplete {
+        dump_info: String,
+    },
+    CancelHfProcess,
     ProceedToWrite {
         blank_type: BlankType,
     },
     BlankReady {
         blank_type: BlankType,
+        existing_data_type: Option<String>,
     },
     StartWrite,
     UpdateWriteProgress {
@@ -99,6 +123,19 @@ pub enum WizardAction {
     },
     Retry,
     Reset,
+    BackToScan,
+    SoftReset,
+    Disconnect,
+    ReDetectBlank,
+    LoadSavedCard {
+        frequency: Frequency,
+        card_type: CardType,
+        uid: String,
+        raw: String,
+        decoded: HashMap<String, String>,
+        cloneable: bool,
+        recommended_blank: BlankType,
+    },
 }
 
 fn state_name(s: &WizardState) -> &str {
@@ -108,6 +145,8 @@ fn state_name(s: &WizardState) -> &str {
         WizardState::DeviceConnected { .. } => "DeviceConnected",
         WizardState::ScanningCard => "ScanningCard",
         WizardState::CardIdentified { .. } => "CardIdentified",
+        WizardState::HfProcessing { .. } => "HfProcessing",
+        WizardState::HfDumpReady { .. } => "HfDumpReady",
         WizardState::WaitingForBlank { .. } => "WaitingForBlank",
         WizardState::BlankDetected { .. } => "BlankDetected",
         WizardState::Writing { .. } => "Writing",
@@ -124,6 +163,10 @@ fn action_name(a: &WizardAction) -> &str {
         WizardAction::DeviceFound { .. } => "DeviceFound",
         WizardAction::StartScan => "StartScan",
         WizardAction::CardFound { .. } => "CardFound",
+        WizardAction::StartHfProcess => "StartHfProcess",
+        WizardAction::UpdateHfProgress { .. } => "UpdateHfProgress",
+        WizardAction::HfProcessComplete { .. } => "HfProcessComplete",
+        WizardAction::CancelHfProcess => "CancelHfProcess",
         WizardAction::ProceedToWrite { .. } => "ProceedToWrite",
         WizardAction::BlankReady { .. } => "BlankReady",
         WizardAction::StartWrite => "StartWrite",
@@ -134,24 +177,47 @@ fn action_name(a: &WizardAction) -> &str {
         WizardAction::ReportError { .. } => "ReportError",
         WizardAction::Retry => "Retry",
         WizardAction::Reset => "Reset",
+        WizardAction::BackToScan => "BackToScan",
+        WizardAction::SoftReset => "SoftReset",
+        WizardAction::Disconnect => "Disconnect",
+        WizardAction::ReDetectBlank => "ReDetectBlank",
+        WizardAction::LoadSavedCard { .. } => "LoadSavedCard",
     }
 }
 
 pub struct WizardMachine {
     pub current: WizardState,
+    pub port: Option<String>,
+    pub model: Option<String>,
+    pub firmware: Option<String>,
 }
 
 impl WizardMachine {
     pub fn new() -> Self {
         WizardMachine {
             current: WizardState::Idle,
+            port: None,
+            model: None,
+            firmware: None,
         }
     }
 
     pub fn transition(&mut self, action: WizardAction) -> Result<&WizardState, AppError> {
-        // Reset is always valid from any state
+        // Reset is always valid from any state — full reset to idle
         if matches!(action, WizardAction::Reset) {
             self.current = WizardState::Idle;
+            self.port = None;
+            self.model = None;
+            self.firmware = None;
+            return Ok(&self.current);
+        }
+
+        // Disconnect is valid from any connected state — clears persistent fields
+        if matches!(action, WizardAction::Disconnect) {
+            self.current = WizardState::Idle;
+            self.port = None;
+            self.model = None;
+            self.firmware = None;
             return Ok(&self.current);
         }
 
@@ -176,7 +242,7 @@ impl WizardMachine {
             // Idle -> DetectingDevice
             (WizardState::Idle, WizardAction::StartDetection) => WizardState::DetectingDevice,
 
-            // DetectingDevice -> DeviceConnected
+            // DetectingDevice -> DeviceConnected (also stores persistent device info)
             (
                 WizardState::DetectingDevice,
                 WizardAction::DeviceFound {
@@ -184,11 +250,16 @@ impl WizardMachine {
                     model,
                     firmware,
                 },
-            ) => WizardState::DeviceConnected {
-                port: port.clone(),
-                model: model.clone(),
-                firmware: firmware.clone(),
-            },
+            ) => {
+                self.port = Some(port.clone());
+                self.model = Some(model.clone());
+                self.firmware = Some(firmware.clone());
+                WizardState::DeviceConnected {
+                    port: port.clone(),
+                    model: model.clone(),
+                    firmware: firmware.clone(),
+                }
+            }
 
             // DeviceConnected -> ScanningCard
             (WizardState::DeviceConnected { .. }, WizardAction::StartScan) => {
@@ -213,7 +284,81 @@ impl WizardMachine {
                 recommended_blank: recommended_blank.clone(),
             },
 
-            // CardIdentified -> WaitingForBlank
+            // CardIdentified -> HfProcessing (start key recovery)
+            (WizardState::CardIdentified { .. }, WizardAction::StartHfProcess) => {
+                WizardState::HfProcessing {
+                    phase: ProcessPhase::KeyCheck,
+                    keys_found: 0,
+                    keys_total: 0,
+                    elapsed_secs: 0,
+                }
+            }
+
+            // HfProcessing -> HfProcessing (progress update)
+            (
+                WizardState::HfProcessing { .. },
+                WizardAction::UpdateHfProgress {
+                    phase,
+                    keys_found,
+                    keys_total,
+                    elapsed_secs,
+                },
+            ) => WizardState::HfProcessing {
+                phase: phase.clone(),
+                keys_found: *keys_found,
+                keys_total: *keys_total,
+                elapsed_secs: *elapsed_secs,
+            },
+
+            // HfProcessing -> HfDumpReady (key recovery + dump complete)
+            (
+                WizardState::HfProcessing { .. },
+                WizardAction::HfProcessComplete { dump_info },
+            ) => WizardState::HfDumpReady {
+                dump_info: dump_info.clone(),
+            },
+
+            // HfProcessing -> DeviceConnected (user cancelled)
+            (WizardState::HfProcessing { .. }, WizardAction::CancelHfProcess) => {
+                match (&self.port, &self.model, &self.firmware) {
+                    (Some(p), Some(m), Some(f)) => WizardState::DeviceConnected {
+                        port: p.clone(),
+                        model: m.clone(),
+                        firmware: f.clone(),
+                    },
+                    _ => {
+                        return Err(AppError::InvalidTransition(
+                            "CancelHfProcess requires persistent device info".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            // HfDumpReady -> WaitingForBlank (proceed to write)
+            (
+                WizardState::HfDumpReady { .. },
+                WizardAction::ProceedToWrite { blank_type },
+            ) => WizardState::WaitingForBlank {
+                expected_blank: blank_type.clone(),
+            },
+
+            // HfDumpReady -> DeviceConnected (back to scan)
+            (WizardState::HfDumpReady { .. }, WizardAction::BackToScan) => {
+                match (&self.port, &self.model, &self.firmware) {
+                    (Some(p), Some(m), Some(f)) => WizardState::DeviceConnected {
+                        port: p.clone(),
+                        model: m.clone(),
+                        firmware: f.clone(),
+                    },
+                    _ => {
+                        return Err(AppError::InvalidTransition(
+                            "BackToScan requires persistent device info".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            // CardIdentified -> WaitingForBlank (LF cards skip HF processing)
             (
                 WizardState::CardIdentified { .. },
                 WizardAction::ProceedToWrite { blank_type },
@@ -222,10 +367,22 @@ impl WizardMachine {
             },
 
             // WaitingForBlank -> BlankDetected
-            (WizardState::WaitingForBlank { .. }, WizardAction::BlankReady { blank_type }) => {
+            (WizardState::WaitingForBlank { .. }, WizardAction::BlankReady { blank_type, existing_data_type }) => {
                 WizardState::BlankDetected {
                     blank_type: blank_type.clone(),
                     ready_to_write: true,
+                    existing_data_type: existing_data_type.clone(),
+                }
+            }
+
+            // BlankDetected -> WaitingForBlank (re-detect after erase)
+            (WizardState::BlankDetected { .. }, WizardAction::ReDetectBlank) => {
+                // Extract expected blank from current state
+                WizardState::WaitingForBlank {
+                    expected_blank: match &self.current {
+                        WizardState::BlankDetected { blank_type, .. } => blank_type.clone(),
+                        _ => unreachable!(),
+                    },
                 }
             }
 
@@ -274,7 +431,7 @@ impl WizardMachine {
             ) => WizardState::Complete {
                 source: source.clone(),
                 target: target.clone(),
-                timestamp: chrono::Utc::now().to_rfc3339(),
+                timestamp: chrono::Local::now().to_rfc3339(),
             },
 
             // Error + Retry -> Idle (user can restart the flow)
@@ -286,6 +443,65 @@ impl WizardMachine {
             (WizardState::Complete { .. }, WizardAction::StartDetection) => {
                 WizardState::DetectingDevice
             }
+
+            // BackToScan: post-scan states -> DeviceConnected using persistent device info
+            (WizardState::CardIdentified { .. }, WizardAction::BackToScan)
+            | (WizardState::WaitingForBlank { .. }, WizardAction::BackToScan)
+            | (WizardState::HfProcessing { .. }, WizardAction::BackToScan) => {
+                match (&self.port, &self.model, &self.firmware) {
+                    (Some(p), Some(m), Some(f)) => WizardState::DeviceConnected {
+                        port: p.clone(),
+                        model: m.clone(),
+                        firmware: f.clone(),
+                    },
+                    _ => {
+                        return Err(AppError::InvalidTransition(
+                            "BackToScan requires persistent device info".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            // SoftReset: Complete/Error -> DeviceConnected using persistent device info
+            (WizardState::Complete { .. }, WizardAction::SoftReset)
+            | (WizardState::Error { .. }, WizardAction::SoftReset) => {
+                match (&self.port, &self.model, &self.firmware) {
+                    (Some(p), Some(m), Some(f)) => WizardState::DeviceConnected {
+                        port: p.clone(),
+                        model: m.clone(),
+                        firmware: f.clone(),
+                    },
+                    _ => {
+                        return Err(AppError::InvalidTransition(
+                            "SoftReset requires persistent device info".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            // LoadSavedCard: DeviceConnected -> CardIdentified with provided card data
+            (
+                WizardState::DeviceConnected { .. },
+                WizardAction::LoadSavedCard {
+                    frequency,
+                    card_type,
+                    uid,
+                    raw,
+                    decoded,
+                    cloneable,
+                    recommended_blank,
+                },
+            ) => WizardState::CardIdentified {
+                frequency: frequency.clone(),
+                card_type: card_type.clone(),
+                card_data: CardData {
+                    uid: uid.clone(),
+                    raw: raw.clone(),
+                    decoded: decoded.clone(),
+                },
+                cloneable: *cloneable,
+                recommended_blank: recommended_blank.clone(),
+            },
 
             _ => {
                 return Err(AppError::InvalidTransition(format!(
