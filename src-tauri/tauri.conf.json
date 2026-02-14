@@ -49,7 +49,8 @@
       "nsis": {
         "installMode": "both",
         "displayLanguageSelector": true,
-        "languages": ["English", "Russian"]
+        "languages": ["English", "Russian"],
+        "installerIcon": "icons/icon.ico"
       }
     }
   }

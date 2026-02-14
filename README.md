@@ -55,7 +55,7 @@ Proxmark3 firmware v4.20728+ recommended. Phosphor bundles its own PM3 client bi
 ```bash
 # Prerequisites: Node.js 18+, Rust 1.70+, Proxmark3 client binary
 
-git clone https://github.com/user/phosphor.git
+git clone https://github.com/nikitaart2000/phosphor.git
 cd phosphor
 npm install
 npx tauri dev      # development
@@ -68,6 +68,10 @@ The PM3 client binary and its DLLs go in `src-tauri/binaries/` and `src-tauri/pm
 
 Tauri v2, React 19, TypeScript, XState v5, Rust. Dual state machine architecture: Rust backend (WizardMachine) and frontend (XState) stay in sync through Tauri commands.
 
+## Author
+
+Created by **nik shuv**
+
 ## License
 
-[GPL-3.0](LICENSE)
+[GPL-3.0](LICENSE) — Copyright 2025-2026 nik shuv
